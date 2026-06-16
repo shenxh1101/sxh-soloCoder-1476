@@ -1,4 +1,4 @@
-import type { Worker, Order, MonthlyPerformance, WorkerWithScore, Customer, FollowUp, FollowUpType, CustomerProfile, WorkerUnavailability } from '../../shared/types';
+import type { Worker, Order, MonthlyPerformance, WorkerWithScore, Customer, FollowUp, FollowUpType, CustomerProfile, WorkerUnavailability, CallbackReminder } from '../../shared/types';
 
 const API_BASE = '/api';
 
@@ -94,11 +94,26 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ type, content, createdBy }),
     }),
+    editFollowUp: (orderId: number, followUpId: number, content: string) => request<FollowUp>(`/orders/${orderId}/followups/${followUpId}`, {
+      method: 'PUT',
+      body: JSON.stringify({ content }),
+    }),
   },
   customers: {
     list: () => request<Customer[]>('/customers'),
     get: (id: number) => request<CustomerProfile & { orders: Order[]; followups: FollowUp[] }>(`/customers/${id}`),
     getByPhone: (phone: string) => request<CustomerProfile & { recentOrders?: Order[] }>(`/customers/phone/${encodeURIComponent(phone)}`),
+    spendingTrend: (id: number) => request<Array<{ month: string; orders: number; hours: number; spending: number }>>(`/customers/${id}/spending-trend`),
+    reminders: (id: number) => request<CallbackReminder[]>(`/customers/${id}/reminders`),
+    addReminder: (id: number, data: { type: string; title: string; description?: string; dueDate: string; orderId?: number }) => request<CallbackReminder>(`/customers/${id}/reminders`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+    updateReminder: (customerId: number, reminderId: number, data: { status?: string; title?: string; description?: string; dueDate?: string }) => request<CallbackReminder>(`/customers/${customerId}/reminders/${reminderId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+    pendingReminders: () => request<(CallbackReminder & { customerName: string; customerPhone: string })[]>('/customers/reminders/pending'),
     create: (data: Partial<Customer>) => request<Customer>('/customers', {
       method: 'POST',
       body: JSON.stringify(data),

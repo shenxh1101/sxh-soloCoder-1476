@@ -59,7 +59,7 @@ export interface WorkerWithScore extends Worker {
   matchScore: number;
 }
 
-export type FollowUpType = 'phone_call' | 'time_change' | 'worker_feedback' | 'reassign' | 'cancel' | 'other';
+export type FollowUpType = 'phone_call' | 'time_change' | 'worker_feedback' | 'reassign' | 'cancel' | 'callback' | 'other';
 
 export interface FollowUp {
   id: number;
@@ -68,6 +68,25 @@ export interface FollowUp {
   content: string;
   createdBy: string;
   createdAt: string;
+  updatedAt?: string;
+}
+
+export type ReminderType = 'post_service_callback' | 'insurance_renewal' | 'inactive_customer' | 'custom';
+export type ReminderStatus = 'pending' | 'done' | 'skipped';
+
+export interface CallbackReminder {
+  id: number;
+  customerId: number;
+  type: ReminderType;
+  title: string;
+  description?: string;
+  dueDate: string;
+  status: ReminderStatus;
+  orderId?: number;
+  createdBy: string;
+  createdAt: string;
+  updatedAt?: string;
+  completedAt?: string;
 }
 
 export interface WorkerUnavailability {

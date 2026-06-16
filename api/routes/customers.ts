@@ -10,7 +10,13 @@ import {
   getWorkers,
   getWorkerById,
   getFollowUpsByCustomerPhone,
+  getRemindersByCustomer,
+  getPendingReminders,
+  addReminder,
+  updateReminder,
+  getSpendingTrend,
 } from '../db/index.js';
+import type { ReminderType, ReminderStatus } from '../../shared/types.js';
 
 const router = Router();
 
@@ -105,6 +111,94 @@ router.get('/phone/:phone', (req, res) => {
     ...profile,
     recentOrders: customerOrders.slice(0, 5),
   });
+});
+
+router.get('/reminders/pending', (_req, res) => {
+  const reminders = getPendingReminders();
+  const enriched = reminders.map(r => {
+    const customer = getCustomerById(r.customerId);
+    return {
+      ...r,
+      customerName: customer?.name || '未知客户',
+      customerPhone: customer?.phone || '',
+    };
+  });
+  res.json(enriched);
+});
+
+router.get('/:id/spending-trend', (req, res) => {
+  const id = parseInt(req.params.id);
+  const customer = getCustomerById(id);
+  if (!customer) {
+    return res.status(404).json({ error: '客户不存在' });
+  }
+  res.json(getSpendingTrend(customer.phone));
+});
+
+router.get('/:id/reminders', (req, res) => {
+  const id = parseInt(req.params.id);
+  const customer = getCustomerById(id);
+  if (!customer) {
+    return res.status(404).json({ error: '客户不存在' });
+  }
+  res.json(getRemindersByCustomer(id));
+});
+
+router.post('/:id/reminders', (req, res) => {
+  const id = parseInt(req.params.id);
+  const customer = getCustomerById(id);
+  if (!customer) {
+    return res.status(404).json({ error: '客户不存在' });
+  }
+
+  const { type, title, description, dueDate, orderId } = req.body;
+  if (!type || !title || !dueDate) {
+    return res.status(400).json({ error: '类型、标题和到期日期不能为空' });
+  }
+
+  const validTypes: ReminderType[] = ['post_service_callback', 'insurance_renewal', 'inactive_customer', 'custom'];
+  if (!validTypes.includes(type as ReminderType)) {
+    return res.status(400).json({ error: '无效的提醒类型' });
+  }
+
+  const reminder = addReminder({
+    customerId: id,
+    type: type as ReminderType,
+    title,
+    description,
+    dueDate,
+    status: 'pending',
+    orderId,
+    createdBy: '管理员',
+  });
+
+  res.status(201).json(reminder);
+});
+
+router.put('/:customerId/reminders/:reminderId', (req, res) => {
+  const reminderId = parseInt(req.params.reminderId);
+  const { status, title, description, dueDate } = req.body;
+
+  if (status) {
+    const validStatuses: ReminderStatus[] = ['pending', 'done', 'skipped'];
+    if (!validStatuses.includes(status as ReminderStatus)) {
+      return res.status(400).json({ error: '无效的状态' });
+    }
+  }
+
+  const updates: any = {};
+  if (status) updates.status = status;
+  if (title) updates.title = title;
+  if (description !== undefined) updates.description = description;
+  if (dueDate) updates.dueDate = dueDate;
+  if (status === 'done') updates.completedAt = new Date().toISOString();
+
+  const updated = updateReminder(reminderId, updates);
+  if (!updated) {
+    return res.status(404).json({ error: '提醒不存在' });
+  }
+
+  res.json(updated);
 });
 
 router.get('/:id', (req, res) => {

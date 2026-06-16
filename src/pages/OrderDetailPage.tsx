@@ -61,6 +61,9 @@ export default function OrderDetailPage() {
   const [savingFollowUp, setSavingFollowUp] = useState(false);
   const [unavailableWorkers, setUnavailableWorkers] = useState<(WorkerUnavailability & { skills?: string[] })[]>([]);
   const [reassignReason, setReassignReason] = useState('');
+  const [followUpFilter, setFollowUpFilter] = useState<FollowUpType | 'all'>('all');
+  const [editingFollowUpId, setEditingFollowUpId] = useState<number | null>(null);
+  const [editingFollowUpContent, setEditingFollowUpContent] = useState('');
 
   useEffect(() => {
     loadOrder();
@@ -186,6 +189,19 @@ export default function OrderDetailPage() {
       alert(e.message || '保存跟进记录失败');
     } finally {
       setSavingFollowUp(false);
+    }
+  }
+
+  async function handleSaveEditFollowUp(followUpId: number) {
+    if (!order || !editingFollowUpContent.trim()) return;
+    try {
+      await api.orders.editFollowUp(order.id, followUpId, editingFollowUpContent.trim());
+      const updatedFollowups = await api.orders.followups(order.id);
+      setFollowups(updatedFollowups);
+      setEditingFollowUpId(null);
+      setEditingFollowUpContent('');
+    } catch (e: any) {
+      alert(e.message || '编辑跟进记录失败');
     }
   }
 
@@ -552,17 +568,60 @@ export default function OrderDetailPage() {
                             return (
                               <div
                                 key={uw.workerId}
-                                className="flex items-center p-3 rounded-lg border border-stone-200 bg-stone-50 opacity-60"
+                                className="flex items-start p-3 rounded-lg border border-stone-200 bg-stone-50 opacity-60"
                               >
                                 <div className="w-10 h-10 rounded-full bg-stone-200 flex items-center justify-center text-stone-500 font-bold">
                                   {uw.workerName.charAt(0)}
                                 </div>
                                 <div className="ml-3 flex-1">
                                   <p className="font-medium text-stone-600">{uw.workerName}</p>
-                                  <div className="flex items-center gap-1.5 mt-0.5">
-                                    <ReasonIcon className="w-3.5 h-3.5 text-amber-500" />
-                                    <span className="text-xs text-amber-600">{uw.detail}</span>
-                                  </div>
+                                  {uw.reason === 'skill_mismatch' && (
+                                    <div className="mt-1">
+                                      <div className="flex items-center gap-1.5">
+                                        <ReasonIcon className="w-3.5 h-3.5 text-red-500" />
+                                        <span className="text-xs text-red-600 font-medium">
+                                          缺少「{order.serviceType}」能力
+                                        </span>
+                                      </div>
+                                      {uw.skills && uw.skills.length > 0 && (
+                                        <div className="flex flex-wrap gap-1 mt-1">
+                                          {uw.skills.map(skill => (
+                                            <span
+                                              key={skill}
+                                              className="px-1.5 py-0.5 rounded text-xs bg-stone-200 text-stone-500"
+                                            >
+                                              {skill}
+                                            </span>
+                                          ))}
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+                                  {uw.reason === 'time_conflict' && (
+                                    <div className="flex items-center gap-1.5 mt-0.5">
+                                      <ReasonIcon className="w-3.5 h-3.5 text-amber-500" />
+                                      <span className="text-xs text-amber-600">
+                                        与订单{' '}
+                                        {uw.conflictOrderId ? (
+                                          <Link
+                                            to={`/orders/${uw.conflictOrderId}`}
+                                            className="text-primary-600 hover:text-primary-700 underline font-medium"
+                                          >
+                                            #{uw.conflictOrderId}
+                                          </Link>
+                                        ) : (
+                                          <span>#{uw.detail}</span>
+                                        )}
+                                        {' '}时间冲突
+                                      </span>
+                                    </div>
+                                  )}
+                                  {uw.reason === 'inactive' && (
+                                    <div className="flex items-center gap-1.5 mt-0.5">
+                                      <ReasonIcon className="w-3.5 h-3.5 text-stone-400" />
+                                      <span className="text-xs text-stone-400">阿姨已停用</span>
+                                    </div>
+                                  )}
                                 </div>
                               </div>
                             );
@@ -786,56 +845,147 @@ export default function OrderDetailPage() {
               <p>暂无跟进记录</p>
             </div>
           ) : (
-            <div className="space-y-0">
-              {followups.map((fu, idx) => {
-                const typeLabels: Record<FollowUpType, string> = {
-                  phone_call: '电话跟进',
-                  time_change: '时间变更',
-                  worker_feedback: '阿姨反馈',
-                  reassign: '改派记录',
-                  cancel: '取消记录',
-                  other: '其他',
-                };
-                const typeColors: Record<FollowUpType, string> = {
-                  phone_call: 'bg-blue-400',
-                  time_change: 'bg-amber-400',
-                  worker_feedback: 'bg-purple-400',
-                  reassign: 'bg-primary-400',
-                  cancel: 'bg-red-400',
-                  other: 'bg-stone-400',
-                };
-                const badgeColors: Record<FollowUpType, string> = {
-                  phone_call: 'bg-blue-100 text-blue-700',
-                  time_change: 'bg-amber-100 text-amber-700',
-                  worker_feedback: 'bg-purple-100 text-purple-700',
-                  reassign: 'bg-primary-100 text-primary-700',
-                  cancel: 'bg-red-100 text-red-700',
-                  other: 'bg-stone-100 text-stone-700',
-                };
-                return (
-                  <div key={fu.id} className="flex gap-4">
-                    <div className="flex flex-col items-center">
-                      <div className={`w-3 h-3 rounded-full ${typeColors[fu.type]} flex-shrink-0 mt-1.5`} />
-                      {idx < followups.length - 1 && (
-                        <div className="w-0.5 flex-1 bg-stone-200 mt-1" />
-                      )}
-                    </div>
-                    <div className="flex-1 pb-6">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className={`px-2 py-0.5 rounded text-xs font-medium ${badgeColors[fu.type]}`}>
-                          {typeLabels[fu.type]}
-                        </span>
+            <>
+              <div className="flex flex-wrap gap-1.5 mb-4">
+                {([
+                  { value: 'all' as const, label: '全部' },
+                  { value: 'phone_call' as FollowUpType | 'all', label: '电话跟进' },
+                  { value: 'time_change' as FollowUpType | 'all', label: '时间变更' },
+                  { value: 'worker_feedback' as FollowUpType | 'all', label: '阿姨反馈' },
+                  { value: 'reassign' as FollowUpType | 'all', label: '改派记录' },
+                  { value: 'callback' as FollowUpType | 'all', label: '回访' },
+                  { value: 'other' as FollowUpType | 'all', label: '其他' },
+                ]).map(item => (
+                  <button
+                    key={item.value}
+                    type="button"
+                    onClick={() => setFollowUpFilter(item.value)}
+                    className={`px-2.5 py-1 rounded text-xs font-medium border transition-all ${
+                      followUpFilter === item.value
+                        ? 'bg-primary-500 text-white border-primary-500'
+                        : 'bg-white text-stone-600 border-stone-200 hover:border-primary-300'
+                    }`}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+              <div className="space-y-0">
+                {followups
+                  .filter(fu => followUpFilter === 'all' || fu.type === followUpFilter)
+                  .map((fu, idx, filteredList) => {
+                    const typeLabels: Record<FollowUpType, string> = {
+                      phone_call: '电话跟进',
+                      time_change: '时间变更',
+                      worker_feedback: '阿姨反馈',
+                      reassign: '改派记录',
+                      cancel: '取消记录',
+                      callback: '回访',
+                      other: '其他',
+                    };
+                    const typeColors: Record<FollowUpType, string> = {
+                      phone_call: 'bg-blue-400',
+                      time_change: 'bg-amber-400',
+                      worker_feedback: 'bg-purple-400',
+                      reassign: 'bg-primary-400',
+                      cancel: 'bg-red-400',
+                      callback: 'bg-teal-400',
+                      other: 'bg-stone-400',
+                    };
+                    const badgeColors: Record<FollowUpType, string> = {
+                      phone_call: 'bg-blue-100 text-blue-700',
+                      time_change: 'bg-amber-100 text-amber-700',
+                      worker_feedback: 'bg-purple-100 text-purple-700',
+                      reassign: 'bg-primary-100 text-primary-700',
+                      cancel: 'bg-red-100 text-red-700',
+                      callback: 'bg-teal-100 text-teal-700',
+                      other: 'bg-stone-100 text-stone-700',
+                    };
+                    const isEditing = editingFollowUpId === fu.id;
+                    const reassignLinkMatch = fu.type === 'reassign' ? fu.content.match(/订单\s*#?(\d+)/) : null;
+                    return (
+                      <div key={fu.id} className="flex gap-4">
+                        <div className="flex flex-col items-center">
+                          <div className={`w-3 h-3 rounded-full ${typeColors[fu.type]} flex-shrink-0 mt-1.5`} />
+                          {idx < filteredList.length - 1 && (
+                            <div className="w-0.5 flex-1 bg-stone-200 mt-1" />
+                          )}
+                        </div>
+                        <div className="flex-1 pb-6">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className={`px-2 py-0.5 rounded text-xs font-medium ${badgeColors[fu.type]}`}>
+                              {typeLabels[fu.type]}
+                            </span>
+                            {!isEditing && (
+                              <button
+                                onClick={() => {
+                                  setEditingFollowUpId(fu.id);
+                                  setEditingFollowUpContent(fu.content);
+                                }}
+                                className="ml-auto text-stone-300 hover:text-stone-500 transition-colors"
+                              >
+                                <Edit3 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
+                          {isEditing ? (
+                            <div>
+                              <textarea
+                                value={editingFollowUpContent}
+                                onChange={e => setEditingFollowUpContent(e.target.value)}
+                                rows={3}
+                                className="w-full px-3 py-2 border border-primary-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white resize-none text-sm"
+                              />
+                              <div className="flex gap-2 mt-2">
+                                <button
+                                  onClick={() => {
+                                    setEditingFollowUpId(null);
+                                    setEditingFollowUpContent('');
+                                  }}
+                                  className="px-3 py-1 text-xs border border-stone-200 text-stone-600 rounded hover:bg-stone-50 transition-colors font-medium"
+                                >
+                                  取消
+                                </button>
+                                <button
+                                  onClick={() => handleSaveEditFollowUp(fu.id)}
+                                  className="flex items-center gap-1 px-3 py-1 text-xs bg-primary-500 text-white rounded hover:bg-primary-600 transition-colors font-medium"
+                                >
+                                  <Save className="w-3 h-3" />
+                                  保存
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <p className="text-stone-700">
+                              {fu.type === 'reassign' && reassignLinkMatch ? (
+                                <>
+                                  {fu.content.substring(0, reassignLinkMatch.index!)}
+                                  <Link
+                                    to={`/orders/${reassignLinkMatch[1]}`}
+                                    className="text-primary-600 hover:text-primary-700 underline"
+                                  >
+                                    订单 #{reassignLinkMatch[1]}
+                                  </Link>
+                                  {fu.content.substring(reassignLinkMatch.index! + reassignLinkMatch[0].length)}
+                                </>
+                              ) : (
+                                fu.content
+                              )}
+                            </p>
+                          )}
+                          <div className="flex items-center gap-3 mt-1.5 text-xs text-stone-400">
+                            <span>{fu.createdBy}</span>
+                            <span>{formatDateTime(fu.createdAt)}</span>
+                            {fu.updatedAt && fu.updatedAt !== fu.createdAt && (
+                              <span>（已编辑 {formatDateTime(fu.updatedAt)}）</span>
+                            )}
+                          </div>
+                        </div>
                       </div>
-                      <p className="text-stone-700">{fu.content}</p>
-                      <div className="flex items-center gap-3 mt-1.5 text-xs text-stone-400">
-                        <span>{fu.createdBy}</span>
-                        <span>{formatDateTime(fu.createdAt)}</span>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+                    );
+                  })}
+              </div>
+            </>
           )}
 
           {showFollowUpForm && (
@@ -848,6 +998,7 @@ export default function OrderDetailPage() {
                   { value: 'worker_feedback' as FollowUpType, label: '阿姨反馈' },
                   { value: 'reassign' as FollowUpType, label: '改派记录' },
                   { value: 'cancel' as FollowUpType, label: '取消记录' },
+                  { value: 'callback' as FollowUpType, label: '回访' },
                   { value: 'other' as FollowUpType, label: '其他' },
                 ]).map(item => (
                   <button

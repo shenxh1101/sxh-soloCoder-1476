@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import type { Worker, Order, Customer, FollowUp } from '../../shared/types.js';
+import type { Worker, Order, Customer, FollowUp, CallbackReminder } from '../../shared/types.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -11,6 +11,7 @@ const WORKERS_FILE = path.join(DATA_DIR, 'workers.json');
 const ORDERS_FILE = path.join(DATA_DIR, 'orders.json');
 const CUSTOMERS_FILE = path.join(DATA_DIR, 'customers.json');
 const FOLLOWUPS_FILE = path.join(DATA_DIR, 'followups.json');
+const REMINDERS_FILE = path.join(DATA_DIR, 'reminders.json');
 
 function ensureDataDir() {
   if (!fs.existsSync(DATA_DIR)) {
@@ -41,10 +42,12 @@ export interface Database {
   orders: Order[];
   customers: Customer[];
   followups: FollowUp[];
+  reminders: CallbackReminder[];
   nextWorkerId: number;
   nextOrderId: number;
   nextCustomerId: number;
   nextFollowUpId: number;
+  nextReminderId: number;
 }
 
 const db: Database = {
@@ -52,10 +55,12 @@ const db: Database = {
   orders: [],
   customers: [],
   followups: [],
+  reminders: [],
   nextWorkerId: 1,
   nextOrderId: 1,
   nextCustomerId: 1,
   nextFollowUpId: 1,
+  nextReminderId: 1,
 };
 
 export function loadDatabase(): void {
@@ -63,6 +68,7 @@ export function loadDatabase(): void {
   const orders = readJSONFile<Order[]>(ORDERS_FILE, []);
   const customers = readJSONFile<Customer[]>(CUSTOMERS_FILE, []);
   const followups = readJSONFile<FollowUp[]>(FOLLOWUPS_FILE, []);
+  const reminders = readJSONFile<CallbackReminder[]>(REMINDERS_FILE, []);
 
   if (workers.length === 0 && orders.length === 0 && customers.length === 0) {
     seedMockData();
@@ -71,10 +77,12 @@ export function loadDatabase(): void {
     db.orders = orders;
     db.customers = customers;
     db.followups = followups;
+    db.reminders = reminders;
     db.nextWorkerId = workers.length > 0 ? Math.max(...workers.map(w => w.id)) + 1 : 1;
     db.nextOrderId = orders.length > 0 ? Math.max(...orders.map(o => o.id)) + 1 : 1;
     db.nextCustomerId = customers.length > 0 ? Math.max(...customers.map(c => c.id)) + 1 : 1;
     db.nextFollowUpId = followups.length > 0 ? Math.max(...followups.map(f => f.id)) + 1 : 1;
+    db.nextReminderId = reminders.length > 0 ? Math.max(...reminders.map(r => r.id)) + 1 : 1;
   }
 }
 
@@ -83,6 +91,7 @@ export function saveDatabase(): void {
   writeJSONFile(ORDERS_FILE, db.orders);
   writeJSONFile(CUSTOMERS_FILE, db.customers);
   writeJSONFile(FOLLOWUPS_FILE, db.followups);
+  writeJSONFile(REMINDERS_FILE, db.reminders);
 }
 
 function seedMockData(): void {
@@ -419,6 +428,83 @@ export function addFollowUp(followUp: Omit<FollowUp, 'id' | 'createdAt'>): Follo
   db.followups.push(newFollowUp);
   saveDatabase();
   return newFollowUp;
+}
+
+export function updateFollowUp(id: number, content: string): FollowUp | undefined {
+  const index = db.followups.findIndex(f => f.id === id);
+  if (index === -1) return undefined;
+  db.followups[index] = {
+    ...db.followups[index],
+    content,
+    updatedAt: new Date().toISOString(),
+  };
+  saveDatabase();
+  return db.followups[index];
+}
+
+export function getReminders(): CallbackReminder[] {
+  return db.reminders.sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
+}
+
+export function getRemindersByCustomer(customerId: number): CallbackReminder[] {
+  return db.reminders
+    .filter(r => r.customerId === customerId)
+    .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
+}
+
+export function getPendingReminders(): CallbackReminder[] {
+  return db.reminders
+    .filter(r => r.status === 'pending')
+    .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
+}
+
+export function addReminder(reminder: Omit<CallbackReminder, 'id' | 'createdAt'>): CallbackReminder {
+  const newReminder: CallbackReminder = {
+    ...reminder,
+    id: db.nextReminderId++,
+    createdAt: new Date().toISOString(),
+  };
+  db.reminders.push(newReminder);
+  saveDatabase();
+  return newReminder;
+}
+
+export function updateReminder(id: number, updates: Partial<CallbackReminder>): CallbackReminder | undefined {
+  const index = db.reminders.findIndex(r => r.id === id);
+  if (index === -1) return undefined;
+  db.reminders[index] = {
+    ...db.reminders[index],
+    ...updates,
+    id,
+    updatedAt: new Date().toISOString(),
+  };
+  saveDatabase();
+  return db.reminders[index];
+}
+
+export function getSpendingTrend(phone: string): Array<{ month: string; orders: number; hours: number; spending: number }> {
+  const customerOrders = db.orders.filter(o => o.customerPhone === phone && o.status === 'completed');
+  const monthMap: Record<string, { orders: number; hours: number; spending: number }> = {};
+
+  for (const order of customerOrders) {
+    const month = new Date(order.scheduledStartTime).toISOString().slice(0, 7);
+    if (!monthMap[month]) monthMap[month] = { orders: 0, hours: 0, spending: 0 };
+    monthMap[month].orders++;
+    if (order.workHours) {
+      monthMap[month].hours += order.workHours;
+      const worker = order.workerId ? getWorkerById(order.workerId) : null;
+      if (worker) monthMap[month].spending += order.workHours * worker.hourlyRate;
+    }
+  }
+
+  return Object.entries(monthMap)
+    .map(([month, data]) => ({
+      month,
+      orders: data.orders,
+      hours: Math.round(data.hours * 10) / 10,
+      spending: Math.round(data.spending),
+    }))
+    .sort((a, b) => a.month.localeCompare(b.month));
 }
 
 export function getWorkerAvailability(

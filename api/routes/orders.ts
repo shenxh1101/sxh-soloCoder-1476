@@ -8,6 +8,7 @@ import {
   upsertCustomerFromOrder,
   getFollowUpsByOrderId,
   addFollowUp,
+  updateFollowUp,
   getWorkers,
   getWorkerById,
 } from '../db/index.js';
@@ -290,7 +291,7 @@ router.post('/:id/followups', (req, res) => {
     return res.status(400).json({ error: '跟进类型和内容不能为空' });
   }
 
-  const validTypes: FollowUpType[] = ['phone_call', 'time_change', 'worker_feedback', 'reassign', 'cancel', 'other'];
+  const validTypes: FollowUpType[] = ['phone_call', 'time_change', 'worker_feedback', 'reassign', 'cancel', 'callback', 'other'];
   if (!validTypes.includes(type as FollowUpType)) {
     return res.status(400).json({ error: '无效的跟进类型' });
   }
@@ -303,6 +304,22 @@ router.post('/:id/followups', (req, res) => {
   });
 
   res.status(201).json(followUp);
+});
+
+router.put('/:orderId/followups/:followUpId', (req, res) => {
+  const { content } = req.body;
+  const followUpId = parseInt(req.params.followUpId);
+
+  if (!content || !content.trim()) {
+    return res.status(400).json({ error: '跟进内容不能为空' });
+  }
+
+  const updated = updateFollowUp(followUpId, content.trim());
+  if (!updated) {
+    return res.status(404).json({ error: '跟进记录不存在' });
+  }
+
+  res.json(updated);
 });
 
 export default router;

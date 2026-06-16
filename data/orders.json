@@ -457,5 +457,18 @@
     "status": "completed",
     "createdAt": "2026-06-01T03:00:00.000Z",
     "updatedAt": "2026-06-16T08:18:34.342Z"
+  },
+  {
+    "customerName": "???",
+    "customerPhone": "13900001111",
+    "serviceAddress": "??????88?",
+    "serviceType": "???",
+    "scheduledStartTime": "2026-06-18T09:00:00",
+    "scheduledEndTime": "2026-06-18T12:00:00",
+    "workerId": 10,
+    "status": "assigned",
+    "id": 26,
+    "createdAt": "2026-06-16T09:11:35.952Z",
+    "updatedAt": "2026-06-16T09:11:35.952Z"
   }
 ]

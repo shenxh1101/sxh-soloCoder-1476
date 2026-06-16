@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
-import { Users, Phone, MapPin, Calendar, Search, Plus, ChevronDown, ChevronUp, Star, ThumbsUp, ThumbsDown, Eye } from 'lucide-react';
+import { Users, Phone, MapPin, Calendar, Search, Plus, ChevronDown, ChevronUp, Star, ThumbsUp, ThumbsDown, Eye, Bell, BellRing, Check, SkipForward } from 'lucide-react';
 import { useNavigate, Link } from 'react-router-dom';
 import { api } from '../lib/api';
-import type { Customer, Order } from '../../shared/types';
+import type { Customer, Order, CallbackReminder } from '../../shared/types';
 
 const STATUS_LABELS: Record<string, string> = {
   pending: '待派单',
@@ -24,6 +24,8 @@ export default function CustomersPage() {
   const navigate = useNavigate();
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
+  const [reminders, setReminders] = useState<(CallbackReminder & { customerName: string; customerPhone: string })[]>([]);
+  const [showReminders, setShowReminders] = useState(true);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [expandedId, setExpandedId] = useState<number | null>(null);
@@ -35,12 +37,14 @@ export default function CustomersPage() {
   async function loadData() {
     setLoading(true);
     try {
-      const [customersRes, ordersRes] = await Promise.all([
+      const [customersRes, ordersRes, remindersRes] = await Promise.all([
         api.customers.list(),
         api.orders.list(),
+        api.customers.pendingReminders(),
       ]);
       setCustomers(customersRes);
       setOrders(ordersRes);
+      setReminders(remindersRes);
     } catch (e) {
       console.error('加载客户数据失败', e);
     } finally {
@@ -101,6 +105,96 @@ export default function CustomersPage() {
           <span className="text-sm">共 {filteredCustomers.length} 位客户</span>
         </div>
       </div>
+
+      {reminders.length > 0 && (
+        <div className="bg-white rounded-xl border border-stone-200 shadow-sm overflow-hidden">
+          <button
+            onClick={() => setShowReminders(!showReminders)}
+            className="w-full flex items-center justify-between p-4 hover:bg-stone-50 transition-colors"
+          >
+            <div className="flex items-center gap-2">
+              <BellRing className="w-5 h-5 text-amber-500" />
+              <span className="font-semibold text-stone-800">待办提醒 ({reminders.length})</span>
+            </div>
+            {showReminders ? (
+              <ChevronUp className="w-5 h-5 text-stone-400" />
+            ) : (
+              <ChevronDown className="w-5 h-5 text-stone-400" />
+            )}
+          </button>
+          {showReminders && (
+            <div className="border-t border-stone-100 px-4 py-3 space-y-3">
+              {reminders.map(r => {
+                const dueDate = new Date(r.dueDate);
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                const dueDateStart = new Date(dueDate);
+                dueDateStart.setHours(0, 0, 0, 0);
+                const isOverdue = dueDateStart < today;
+                const isToday = dueDateStart.getTime() === today.getTime();
+
+                const typeConfig: Record<string, { label: string; style: string }> = {
+                  post_service_callback: { label: '服务回访', style: 'bg-blue-100 text-blue-700' },
+                  insurance_renewal: { label: '保险续约', style: 'bg-amber-100 text-amber-700' },
+                  inactive_customer: { label: '沉睡客户', style: 'bg-purple-100 text-purple-700' },
+                  custom: { label: '自定义', style: 'bg-stone-100 text-stone-600' },
+                };
+                const tc = typeConfig[r.type] || typeConfig.custom;
+
+                return (
+                  <div
+                    key={r.id}
+                    className="flex items-center justify-between bg-stone-50 rounded-lg p-3"
+                  >
+                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                      <span className={`px-2 py-0.5 rounded text-xs font-medium flex-shrink-0 ${tc.style}`}>
+                        {tc.label}
+                      </span>
+                      <div className="min-w-0">
+                        <div className="text-sm font-medium text-stone-800 truncate">{r.title}</div>
+                        <div className="text-xs text-stone-500">
+                          <Link
+                            to={`/customers/${r.customerId}`}
+                            className="hover:text-primary-600 transition-colors"
+                          >
+                            {r.customerName}
+                          </Link>
+                          <span className="ml-1.5">{r.customerPhone}</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3 flex-shrink-0 ml-3">
+                      <span className={`text-xs font-medium ${isOverdue ? 'text-red-500' : isToday ? 'text-amber-500' : 'text-stone-500'}`}>
+                        {isOverdue ? '已逾期' : isToday ? '今天' : ''} {dueDate.toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' })}
+                      </span>
+                      <button
+                        onClick={async () => {
+                          await api.customers.updateReminder(r.customerId, r.id, { status: 'done' });
+                          loadData();
+                        }}
+                        className="flex items-center px-2 py-1 bg-success-500 text-white rounded text-xs font-medium hover:bg-success-600 transition-colors"
+                      >
+                        <Check className="w-3 h-3 mr-0.5" />
+                        完成
+                      </button>
+                      <button
+                        onClick={async () => {
+                          await api.customers.updateReminder(r.customerId, r.id, { status: 'skipped' });
+                          loadData();
+                        }}
+                        className="flex items-center px-2 py-1 bg-stone-200 text-stone-600 rounded text-xs font-medium hover:bg-stone-300 transition-colors"
+                      >
+                        <SkipForward className="w-3 h-3 mr-0.5" />
+                        跳过
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
 
       {filteredCustomers.length === 0 ? (
         <div className="text-center py-16 text-stone-400">
