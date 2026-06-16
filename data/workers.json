@@ -1,0 +1,158 @@
+[
+  {
+    "id": 1,
+    "name": "王阿姨",
+    "phone": "13810000000",
+    "skills": [
+      "日常保洁",
+      "深度保洁",
+      "擦玻璃"
+    ],
+    "hireDate": "2026-03-16",
+    "insuranceExpiryDate": "2026-06-23",
+    "status": "active",
+    "hourlyRate": 25,
+    "createdAt": "2026-06-16T07:00:41.430Z",
+    "updatedAt": "2026-06-16T07:00:41.430Z"
+  },
+  {
+    "id": 2,
+    "name": "李阿姨",
+    "phone": "13810000111",
+    "skills": [
+      "日常保洁",
+      "油烟机清洗",
+      "擦玻璃"
+    ],
+    "hireDate": "2025-12-16",
+    "insuranceExpiryDate": "2026-06-30",
+    "status": "active",
+    "hourlyRate": 28,
+    "createdAt": "2026-06-16T07:00:41.430Z",
+    "updatedAt": "2026-06-16T07:00:41.430Z"
+  },
+  {
+    "id": 3,
+    "name": "张阿姨",
+    "phone": "13810000222",
+    "skills": [
+      "深度保洁",
+      "地板打蜡",
+      "擦玻璃"
+    ],
+    "hireDate": "2025-09-16",
+    "insuranceExpiryDate": "2026-07-07",
+    "status": "active",
+    "hourlyRate": 30,
+    "createdAt": "2026-06-16T07:00:41.430Z",
+    "updatedAt": "2026-06-16T07:00:41.430Z"
+  },
+  {
+    "id": 4,
+    "name": "刘阿姨",
+    "phone": "13810000333",
+    "skills": [
+      "日常保洁",
+      "深度保洁"
+    ],
+    "hireDate": "2025-06-16",
+    "insuranceExpiryDate": "2026-11-16",
+    "status": "active",
+    "hourlyRate": 25,
+    "createdAt": "2026-06-16T07:00:41.430Z",
+    "updatedAt": "2026-06-16T07:00:41.430Z"
+  },
+  {
+    "id": 5,
+    "name": "陈阿姨",
+    "phone": "13810000444",
+    "skills": [
+      "油烟机清洗",
+      "擦玻璃",
+      "深度保洁"
+    ],
+    "hireDate": "2025-03-16",
+    "insuranceExpiryDate": "2026-12-16",
+    "status": "active",
+    "hourlyRate": 28,
+    "createdAt": "2026-06-16T07:00:41.430Z",
+    "updatedAt": "2026-06-16T07:00:41.430Z"
+  },
+  {
+    "id": 6,
+    "name": "赵阿姨",
+    "phone": "13810000555",
+    "skills": [
+      "日常保洁",
+      "地板打蜡"
+    ],
+    "hireDate": "2024-12-16",
+    "insuranceExpiryDate": "2027-01-16",
+    "status": "active",
+    "hourlyRate": 26,
+    "createdAt": "2026-06-16T07:00:41.430Z",
+    "updatedAt": "2026-06-16T07:00:41.430Z"
+  },
+  {
+    "id": 7,
+    "name": "孙阿姨",
+    "phone": "13810000666",
+    "skills": [
+      "深度保洁",
+      "油烟机清洗"
+    ],
+    "hireDate": "2024-09-16",
+    "insuranceExpiryDate": "2027-02-16",
+    "status": "active",
+    "hourlyRate": 27,
+    "createdAt": "2026-06-16T07:00:41.430Z",
+    "updatedAt": "2026-06-16T07:00:41.430Z"
+  },
+  {
+    "id": 8,
+    "name": "周阿姨",
+    "phone": "13810000777",
+    "skills": [
+      "日常保洁",
+      "擦玻璃",
+      "深度保洁"
+    ],
+    "hireDate": "2024-06-16",
+    "insuranceExpiryDate": "2027-03-16",
+    "status": "active",
+    "hourlyRate": 26,
+    "createdAt": "2026-06-16T07:00:41.430Z",
+    "updatedAt": "2026-06-16T07:00:41.430Z"
+  },
+  {
+    "id": 9,
+    "name": "吴阿姨",
+    "phone": "13810000888",
+    "skills": [
+      "地板打蜡",
+      "深度保洁",
+      "油烟机清洗"
+    ],
+    "hireDate": "2024-03-16",
+    "insuranceExpiryDate": "2027-04-16",
+    "status": "active",
+    "hourlyRate": 30,
+    "createdAt": "2026-06-16T07:00:41.430Z",
+    "updatedAt": "2026-06-16T07:00:41.430Z"
+  },
+  {
+    "id": 10,
+    "name": "郑阿姨",
+    "phone": "13810000999",
+    "skills": [
+      "日常保洁",
+      "擦玻璃"
+    ],
+    "hireDate": "2023-12-16",
+    "insuranceExpiryDate": "2027-05-16",
+    "status": "active",
+    "hourlyRate": 24,
+    "createdAt": "2026-06-16T07:00:41.430Z",
+    "updatedAt": "2026-06-16T07:00:41.430Z"
+  }
+]
