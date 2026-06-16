@@ -7,6 +7,7 @@ import OrdersPage from "@/pages/OrdersPage";
 import OrderFormPage from "@/pages/OrderFormPage";
 import OrderDetailPage from "@/pages/OrderDetailPage";
 import ScheduleCalendarPage from "@/pages/ScheduleCalendarPage";
+import CustomersPage from "@/pages/CustomersPage";
 import TimeTrackingPage from "@/pages/TimeTrackingPage";
 import PerformancePage from "@/pages/PerformancePage";
 import ReviewsPage from "@/pages/ReviewsPage";
@@ -25,6 +26,7 @@ export default function App() {
           <Route path="/orders/new" element={<OrderFormPage />} />
           <Route path="/orders/:id" element={<OrderDetailPage />} />
           <Route path="/schedule" element={<ScheduleCalendarPage />} />
+          <Route path="/customers" element={<CustomersPage />} />
           <Route path="/time-tracking" element={<TimeTrackingPage />} />
           <Route path="/performance" element={<PerformancePage />} />
           <Route path="/reviews" element={<ReviewsPage />} />

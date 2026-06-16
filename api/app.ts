@@ -16,6 +16,7 @@ import workersRoutes from './routes/workers.js'
 import ordersRoutes from './routes/orders.js'
 import performanceRoutes from './routes/performance.js'
 import insuranceRoutes from './routes/insurance.js'
+import customersRoutes from './routes/customers.js'
 import { loadDatabase } from './db/index.js'
 
 // for esm mode
@@ -39,6 +40,7 @@ app.use('/api/workers', workersRoutes)
 app.use('/api/orders', ordersRoutes)
 app.use('/api/performance', performanceRoutes)
 app.use('/api/insurance', insuranceRoutes)
+app.use('/api/customers', customersRoutes)
 
 /**
  * health

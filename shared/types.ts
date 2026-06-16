@@ -58,3 +58,14 @@ export interface MonthlyPerformance {
 export interface WorkerWithScore extends Worker {
   matchScore: number;
 }
+
+export interface Customer {
+  id: number;
+  name: string;
+  phone: string;
+  addresses: string[];
+  totalOrders: number;
+  lastServiceDate?: string;
+  createdAt: string;
+  updatedAt: string;
+}

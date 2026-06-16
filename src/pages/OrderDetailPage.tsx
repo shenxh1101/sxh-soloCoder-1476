@@ -19,6 +19,9 @@ import {
   AlertCircle,
   UserCheck,
   MessageSquare,
+  RefreshCw,
+  XCircle,
+  AlertTriangle,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import type { Order, Worker, ReviewRating } from '../../shared/types';
@@ -39,6 +42,13 @@ export default function OrderDetailPage() {
   const [savingReview, setSavingReview] = useState(false);
   const [processingAction, setProcessingAction] = useState<string | null>(null);
 
+  const [showReassignPanel, setShowReassignPanel] = useState(false);
+  const [availableWorkers, setAvailableWorkers] = useState<Worker[]>([]);
+  const [loadingWorkers, setLoadingWorkers] = useState(false);
+  const [reassigning, setReassigning] = useState(false);
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+
   useEffect(() => {
     loadOrder();
   }, [orderId]);
@@ -48,10 +58,12 @@ export default function OrderDetailPage() {
     try {
       const orderData = await api.orders.get(orderId);
       setOrder(orderData);
-      
+
       if (orderData.workerId) {
         const workerData = await api.workers.get(orderData.workerId);
         setWorker(workerData);
+      } else {
+        setWorker(null);
       }
 
       if (orderData.review) {
@@ -105,6 +117,52 @@ export default function OrderDetailPage() {
       alert(e.message || '保存评价失败');
     } finally {
       setSavingReview(false);
+    }
+  }
+
+  async function handleOpenReassign() {
+    if (!order) return;
+    setShowReassignPanel(true);
+    setLoadingWorkers(true);
+    try {
+      const workers = await api.workers.available({
+        serviceType: order.serviceType,
+        startTime: order.scheduledStartTime,
+        endTime: order.scheduledEndTime,
+      });
+      setAvailableWorkers(workers);
+    } catch (e: any) {
+      alert(e.message || '获取可用阿姨失败');
+    } finally {
+      setLoadingWorkers(false);
+    }
+  }
+
+  async function handleConfirmReassign(workerId: number) {
+    if (!order) return;
+    setReassigning(true);
+    try {
+      await api.orders.reassign(order.id, workerId);
+      setShowReassignPanel(false);
+      await loadOrder();
+    } catch (e: any) {
+      alert(e.message || '改派失败');
+    } finally {
+      setReassigning(false);
+    }
+  }
+
+  async function handleCancelOrder() {
+    if (!order) return;
+    setCancelling(true);
+    try {
+      await api.orders.cancel(order.id);
+      setShowCancelConfirm(false);
+      await loadOrder();
+    } catch (e: any) {
+      alert(e.message || '取消订单失败');
+    } finally {
+      setCancelling(false);
     }
   }
 
@@ -190,6 +248,8 @@ export default function OrderDetailPage() {
     return `${hours}小时${minutes}分钟`;
   };
 
+  const canReassignOrCancel = order?.status === 'pending' || order?.status === 'assigned';
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full">
@@ -236,30 +296,32 @@ export default function OrderDetailPage() {
                 {order.customerName} - {order.serviceType}
               </p>
             </div>
-            {(order.status === 'assigned' || order.status === 'in_progress') && (
-              <div className="flex gap-2">
-                {order.status === 'assigned' && (
-                  <button
-                    onClick={handleStart}
-                    disabled={processingAction === 'start'}
-                    className="flex items-center gap-2 px-5 py-2.5 bg-success-500 text-white rounded-lg hover:bg-success-600 transition-colors font-medium disabled:opacity-50"
-                  >
-                    <Play className="w-5 h-5" />
-                    {processingAction === 'start' ? '处理中...' : '开始服务'}
-                  </button>
-                )}
-                {order.status === 'in_progress' && (
-                  <button
-                    onClick={handleEnd}
-                    disabled={processingAction === 'end'}
-                    className="flex items-center gap-2 px-5 py-2.5 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors font-medium disabled:opacity-50"
-                  >
-                    <Square className="w-5 h-5" />
-                    {processingAction === 'end' ? '处理中...' : '结束服务'}
-                  </button>
-                )}
-              </div>
-            )}
+            <div className="flex gap-2">
+              {(order.status === 'assigned' || order.status === 'in_progress') && (
+                <>
+                  {order.status === 'assigned' && (
+                    <button
+                      onClick={handleStart}
+                      disabled={processingAction === 'start'}
+                      className="flex items-center gap-2 px-5 py-2.5 bg-success-500 text-white rounded-lg hover:bg-success-600 transition-colors font-medium disabled:opacity-50"
+                    >
+                      <Play className="w-5 h-5" />
+                      {processingAction === 'start' ? '处理中...' : '开始服务'}
+                    </button>
+                  )}
+                  {order.status === 'in_progress' && (
+                    <button
+                      onClick={handleEnd}
+                      disabled={processingAction === 'end'}
+                      className="flex items-center gap-2 px-5 py-2.5 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors font-medium disabled:opacity-50"
+                    >
+                      <Square className="w-5 h-5" />
+                      {processingAction === 'end' ? '处理中...' : '结束服务'}
+                    </button>
+                  )}
+                </>
+              )}
+            </div>
           </div>
         </div>
 
@@ -328,6 +390,103 @@ export default function OrderDetailPage() {
             ) : (
               <div className="p-4 bg-stone-50 rounded-lg text-stone-500 text-center">
                 暂未指派阿姨
+              </div>
+            )}
+
+            {canReassignOrCancel && (
+              <div className="flex gap-2 mt-4">
+                <button
+                  onClick={handleOpenReassign}
+                  disabled={showReassignPanel}
+                  className="flex items-center gap-1.5 px-4 py-2 text-sm bg-primary-50 text-primary-600 rounded-lg hover:bg-primary-100 transition-colors font-medium border border-primary-200 disabled:opacity-50"
+                >
+                  <RefreshCw className="w-4 h-4" />
+                  改派
+                </button>
+                <button
+                  onClick={() => setShowCancelConfirm(true)}
+                  className="flex items-center gap-1.5 px-4 py-2 text-sm bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors font-medium border border-red-200"
+                >
+                  <XCircle className="w-4 h-4" />
+                  取消订单
+                </button>
+              </div>
+            )}
+
+            {showReassignPanel && (
+              <div className="mt-4 border border-primary-200 rounded-lg bg-primary-50/50 p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="text-sm font-semibold text-stone-700">选择新阿姨</h4>
+                  <button
+                    onClick={() => setShowReassignPanel(false)}
+                    className="text-stone-400 hover:text-stone-600"
+                  >
+                    <XCircle className="w-5 h-5" />
+                  </button>
+                </div>
+
+                {loadingWorkers ? (
+                  <div className="flex items-center justify-center py-8">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500"></div>
+                  </div>
+                ) : availableWorkers.length === 0 ? (
+                  <div className="text-center py-6 text-stone-500">
+                    <AlertTriangle className="w-8 h-8 mx-auto mb-2 text-warning-500" />
+                    <p>当前时段没有可用的阿姨</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2 max-h-64 overflow-y-auto">
+                    <div className="flex items-center gap-2 px-3 py-2 bg-warning-50 border border-warning-200 rounded-lg text-sm text-warning-700 mb-3">
+                      <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                      <span>改派将更换当前服务阿姨，请确认新阿姨时间无冲突</span>
+                    </div>
+                    {availableWorkers.map(w => {
+                      const isCurrentWorker = w.id === order.workerId;
+                      return (
+                        <button
+                          key={w.id}
+                          onClick={() => !isCurrentWorker && handleConfirmReassign(w.id)}
+                          disabled={reassigning || isCurrentWorker}
+                          className={`w-full flex items-center p-3 rounded-lg border transition-colors text-left ${
+                            isCurrentWorker
+                              ? 'bg-stone-100 border-stone-200 opacity-50 cursor-not-allowed'
+                              : 'bg-white border-stone-200 hover:border-primary-300 hover:bg-primary-50'
+                          }`}
+                        >
+                          <div className="w-10 h-10 rounded-full bg-primary-100 flex items-center justify-center text-primary-600 font-bold">
+                            {w.name.charAt(0)}
+                          </div>
+                          <div className="ml-3 flex-1">
+                            <p className="font-medium text-stone-800">
+                              {w.name}
+                              {isCurrentWorker && (
+                                <span className="ml-2 text-xs text-stone-400">（当前阿姨）</span>
+                              )}
+                            </p>
+                            <p className="text-sm text-stone-500">{w.phone}</p>
+                            <div className="flex flex-wrap gap-1 mt-1">
+                              {w.skills.map(skill => (
+                                <span
+                                  key={skill}
+                                  className={`px-1.5 py-0.5 rounded text-xs ${
+                                    skill === order.serviceType
+                                      ? 'bg-primary-100 text-primary-600 font-medium'
+                                      : 'bg-stone-200 text-stone-600'
+                                  }`}
+                                >
+                                  {skill}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                          {!isCurrentWorker && (
+                            <RefreshCw className={`w-5 h-5 text-primary-500 flex-shrink-0 ${reassigning ? 'animate-spin' : ''}`} />
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -512,6 +671,42 @@ export default function OrderDetailPage() {
           )}
         </div>
       </div>
+
+      {showCancelConfirm && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full mx-4 p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center">
+                <AlertTriangle className="w-6 h-6 text-red-600" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-stone-800">确认取消订单</h3>
+                <p className="text-sm text-stone-500">此操作不可撤销</p>
+              </div>
+            </div>
+            <p className="text-stone-600 mb-6">
+              确定要取消订单 #{order.id}（{order.customerName} - {order.serviceType}）吗？取消后订单将无法恢复。
+            </p>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setShowCancelConfirm(false)}
+                disabled={cancelling}
+                className="px-5 py-2.5 border border-stone-200 text-stone-600 rounded-lg hover:bg-stone-50 transition-colors font-medium disabled:opacity-50"
+              >
+                再想想
+              </button>
+              <button
+                onClick={handleCancelOrder}
+                disabled={cancelling}
+                className="flex items-center gap-2 px-5 py-2.5 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors font-medium disabled:opacity-50"
+              >
+                <XCircle className="w-4 h-4" />
+                {cancelling ? '取消中...' : '确认取消'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

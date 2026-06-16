@@ -5,31 +5,36 @@ import {
   addOrder,
   updateOrder,
   deleteOrder,
+  upsertCustomerFromOrder,
 } from '../db/index.js';
 import type { OrderStatus, ReviewRating } from '../../shared/types.js';
 
 const router = Router();
 
 router.get('/', (req, res) => {
-  const { status, date, workerId } = req.query;
+  const { status, date, workerId, serviceType } = req.query;
   let orders = getOrders();
-  
+
   if (status && typeof status === 'string') {
     orders = orders.filter(o => o.status === status);
   }
-  
+
   if (date && typeof date === 'string') {
     const targetDate = new Date(date).toDateString();
-    orders = orders.filter(o => 
+    orders = orders.filter(o =>
       new Date(o.scheduledStartTime).toDateString() === targetDate
     );
   }
-  
+
   if (workerId && typeof workerId === 'string') {
     const wid = parseInt(workerId);
     orders = orders.filter(o => o.workerId === wid);
   }
-  
+
+  if (serviceType && typeof serviceType === 'string') {
+    orders = orders.filter(o => o.serviceType === serviceType);
+  }
+
   res.json(orders);
 });
 
@@ -59,9 +64,13 @@ router.post('/', (req, res) => {
   if (!customerName || !serviceType || !scheduledStartTime || !scheduledEndTime) {
     return res.status(400).json({ error: '缺少必要参数' });
   }
-  
+
+  if (new Date(scheduledEndTime) <= new Date(scheduledStartTime)) {
+    return res.status(400).json({ error: '结束时间必须晚于开始时间' });
+  }
+
   const status: OrderStatus = workerId ? 'assigned' : 'pending';
-  
+
   const newOrder = addOrder({
     customerName,
     customerPhone: customerPhone || '',
@@ -73,7 +82,9 @@ router.post('/', (req, res) => {
     status,
     notes,
   });
-  
+
+  upsertCustomerFromOrder(newOrder);
+
   res.status(201).json(newOrder);
 });
 
@@ -156,25 +167,69 @@ router.post('/:id/end', (req, res) => {
 router.post('/:id/review', (req, res) => {
   const id = parseInt(req.params.id);
   const { rating, comment } = req.body;
-  
+
   if (!rating) {
     return res.status(400).json({ error: '评价等级不能为空' });
   }
-  
+
   const validRatings: ReviewRating[] = ['positive', 'negative', 'neutral'];
   if (!validRatings.includes(rating as ReviewRating)) {
     return res.status(400).json({ error: '无效的评价等级' });
   }
-  
+
   const order = getOrderById(id);
   if (!order) {
     return res.status(404).json({ error: '订单不存在' });
   }
-  
+
   const updatedOrder = updateOrder(id, {
     review: { rating: rating as ReviewRating, comment },
   });
-  
+
+  res.json(updatedOrder);
+});
+
+router.post('/:id/reassign', (req, res) => {
+  const id = parseInt(req.params.id);
+  const { workerId } = req.body;
+
+  if (!workerId) {
+    return res.status(400).json({ error: '请指定新的阿姨' });
+  }
+
+  const order = getOrderById(id);
+  if (!order) {
+    return res.status(404).json({ error: '订单不存在' });
+  }
+
+  if (order.status !== 'pending' && order.status !== 'assigned') {
+    return res.status(400).json({ error: '当前订单状态不支持改派' });
+  }
+
+  const updatedOrder = updateOrder(id, {
+    workerId,
+    status: 'assigned',
+  });
+
+  res.json(updatedOrder);
+});
+
+router.post('/:id/cancel', (req, res) => {
+  const id = parseInt(req.params.id);
+  const order = getOrderById(id);
+
+  if (!order) {
+    return res.status(404).json({ error: '订单不存在' });
+  }
+
+  if (order.status === 'completed' || order.status === 'cancelled') {
+    return res.status(400).json({ error: '已完成或已取消的订单不能取消' });
+  }
+
+  const updatedOrder = updateOrder(id, {
+    status: 'cancelled',
+  });
+
   res.json(updatedOrder);
 });
 

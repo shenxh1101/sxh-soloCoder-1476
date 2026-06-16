@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -19,6 +19,8 @@ interface FormErrors {
   serviceAddress?: string;
   serviceType?: string;
   scheduledDate?: string;
+  startTime?: string;
+  endTime?: string;
   time?: string;
 }
 
@@ -28,7 +30,7 @@ export default function OrderFormPage() {
 
   const [formData, setFormData] = useState({
     customerName: '',
-    customerPhone: '',
+    customerPhone: searchParams.get('customerPhone') || '',
     serviceAddress: '',
     serviceType: '',
     scheduledDate: searchParams.get('date') || '',
@@ -45,6 +47,34 @@ export default function OrderFormPage() {
   const [recommending, setRecommending] = useState(false);
   const [showRecommendation, setShowRecommendation] = useState(false);
   const [errors, setErrors] = useState<FormErrors>({});
+  const [autoFillTip, setAutoFillTip] = useState(false);
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>();
+
+  useEffect(() => {
+    const phone = formData.customerPhone.trim();
+    if (phone.length < 7) return;
+
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+
+    debounceRef.current = setTimeout(async () => {
+      try {
+        const customer = await api.customers.getByPhone(phone);
+        if (customer) {
+          setFormData(prev => ({
+            ...prev,
+            customerName: customer.name || prev.customerName,
+            serviceAddress: customer.addresses?.[0] || prev.serviceAddress,
+          }));
+          setAutoFillTip(true);
+          setTimeout(() => setAutoFillTip(false), 3000);
+        }
+      } catch {}
+    }, 300);
+
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, [formData.customerPhone]);
 
   useEffect(() => {
     const canRecommend = formData.serviceType && formData.scheduledDate && formData.startTime && formData.endTime;
@@ -101,6 +131,14 @@ export default function OrderFormPage() {
 
     if (!formData.scheduledDate) {
       newErrors.scheduledDate = '请选择服务日期';
+    }
+
+    if (!formData.startTime) {
+      newErrors.startTime = '请选择开始时间';
+    }
+
+    if (!formData.endTime) {
+      newErrors.endTime = '请选择结束时间';
     }
 
     if (formData.scheduledDate && formData.startTime && formData.endTime) {
@@ -206,6 +244,12 @@ export default function OrderFormPage() {
                     placeholder="请输入联系电话"
                   />
                 </div>
+                {autoFillTip && (
+                  <p className="mt-1.5 text-sm text-green-600 flex items-center gap-1">
+                    <CheckCircle className="w-4 h-4" />
+                    已自动填充客户信息
+                  </p>
+                )}
               </div>
 
               <div>
@@ -297,11 +341,17 @@ export default function OrderFormPage() {
                       value={formData.startTime}
                       onChange={e => {
                         setFormData({ ...formData, startTime: e.target.value });
-                        if (errors.time) setErrors({ ...errors, time: undefined });
+                        if (errors.startTime || errors.time) setErrors({ ...errors, startTime: undefined, time: undefined });
                       }}
-                      className={`${inputClass(!!errors.time)} pl-10`}
+                      className={`${inputClass(!!errors.startTime || !!errors.time)} pl-10`}
                     />
                   </div>
+                  {errors.startTime && (
+                    <p className="mt-1.5 text-sm text-red-600 flex items-center gap-1">
+                      <AlertCircle className="w-4 h-4" />
+                      {errors.startTime}
+                    </p>
+                  )}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-stone-700 mb-2">
@@ -314,11 +364,17 @@ export default function OrderFormPage() {
                       value={formData.endTime}
                       onChange={e => {
                         setFormData({ ...formData, endTime: e.target.value });
-                        if (errors.time) setErrors({ ...errors, time: undefined });
+                        if (errors.endTime || errors.time) setErrors({ ...errors, endTime: undefined, time: undefined });
                       }}
-                      className={`${inputClass(!!errors.time)} pl-10`}
+                      className={`${inputClass(!!errors.endTime || !!errors.time)} pl-10`}
                     />
                   </div>
+                  {errors.endTime && (
+                    <p className="mt-1.5 text-sm text-red-600 flex items-center gap-1">
+                      <AlertCircle className="w-4 h-4" />
+                      {errors.endTime}
+                    </p>
+                  )}
                 </div>
               </div>
               {errors.time && (

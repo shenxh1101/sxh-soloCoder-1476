@@ -1,4 +1,4 @@
-import type { Worker, Order, MonthlyPerformance, WorkerWithScore } from '../../shared/types';
+import type { Worker, Order, MonthlyPerformance, WorkerWithScore, Customer } from '../../shared/types';
 
 const API_BASE = '/api';
 
@@ -46,11 +46,12 @@ export const api = {
     },
   },
   orders: {
-    list: (params?: { status?: string; date?: string; workerId?: number }) => {
+    list: (params?: { status?: string; date?: string; workerId?: number; serviceType?: string }) => {
       const query = new URLSearchParams();
       if (params?.status) query.set('status', params.status);
       if (params?.date) query.set('date', params.date);
       if (params?.workerId) query.set('workerId', String(params.workerId));
+      if (params?.serviceType) query.set('serviceType', params.serviceType);
       const queryStr = query.toString();
       return request<Order[]>(`/orders${queryStr ? `?${queryStr}` : ''}`);
     },
@@ -75,6 +76,29 @@ export const api = {
     review: (id: number, data: { rating: string; comment?: string }) => request<Order>(`/orders/${id}/review`, {
       method: 'POST',
       body: JSON.stringify(data),
+    }),
+    reassign: (id: number, workerId: number) => request<Order>(`/orders/${id}/reassign`, {
+      method: 'POST',
+      body: JSON.stringify({ workerId }),
+    }),
+    cancel: (id: number) => request<Order>(`/orders/${id}/cancel`, {
+      method: 'POST',
+    }),
+  },
+  customers: {
+    list: () => request<Customer[]>('/customers'),
+    get: (id: number) => request<Customer>(`/customers/${id}`),
+    getByPhone: (phone: string) => request<Customer & { recentOrders?: Order[] }>(`/customers/phone/${encodeURIComponent(phone)}`),
+    create: (data: Partial<Customer>) => request<Customer>('/customers', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+    update: (id: number, data: Partial<Customer>) => request<Customer>(`/customers/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+    delete: (id: number) => request<{ message: string }>(`/customers/${id}`, {
+      method: 'DELETE',
     }),
   },
   performance: {

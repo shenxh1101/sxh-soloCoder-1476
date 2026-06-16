@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import type { Worker, Order } from '../../shared/types.js';
+import type { Worker, Order, Customer } from '../../shared/types.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -9,6 +9,7 @@ const __dirname = path.dirname(__filename);
 const DATA_DIR = path.join(__dirname, '../../data');
 const WORKERS_FILE = path.join(DATA_DIR, 'workers.json');
 const ORDERS_FILE = path.join(DATA_DIR, 'orders.json');
+const CUSTOMERS_FILE = path.join(DATA_DIR, 'customers.json');
 
 function ensureDataDir() {
   if (!fs.existsSync(DATA_DIR)) {
@@ -37,34 +38,42 @@ function writeJSONFile<T>(filePath: string, data: T): void {
 export interface Database {
   workers: Worker[];
   orders: Order[];
+  customers: Customer[];
   nextWorkerId: number;
   nextOrderId: number;
+  nextCustomerId: number;
 }
 
-let db: Database = {
+const db: Database = {
   workers: [],
   orders: [],
+  customers: [],
   nextWorkerId: 1,
   nextOrderId: 1,
+  nextCustomerId: 1,
 };
 
 export function loadDatabase(): void {
   const workers = readJSONFile<Worker[]>(WORKERS_FILE, []);
   const orders = readJSONFile<Order[]>(ORDERS_FILE, []);
+  const customers = readJSONFile<Customer[]>(CUSTOMERS_FILE, []);
 
-  if (workers.length === 0 && orders.length === 0) {
+  if (workers.length === 0 && orders.length === 0 && customers.length === 0) {
     seedMockData();
   } else {
     db.workers = workers;
     db.orders = orders;
+    db.customers = customers;
     db.nextWorkerId = workers.length > 0 ? Math.max(...workers.map(w => w.id)) + 1 : 1;
     db.nextOrderId = orders.length > 0 ? Math.max(...orders.map(o => o.id)) + 1 : 1;
+    db.nextCustomerId = customers.length > 0 ? Math.max(...customers.map(c => c.id)) + 1 : 1;
   }
 }
 
 export function saveDatabase(): void {
   writeJSONFile(WORKERS_FILE, db.workers);
   writeJSONFile(ORDERS_FILE, db.orders);
+  writeJSONFile(CUSTOMERS_FILE, db.customers);
 }
 
 function seedMockData(): void {
@@ -111,13 +120,24 @@ function seedMockData(): void {
   });
   db.nextWorkerId = 11;
 
-  const customers = [
+  const customerDefs = [
     { name: '张先生', phone: '13900001111', address: '朝阳区建国路88号' },
     { name: '李女士', phone: '13900002222', address: '海淀区中关村大街1号' },
     { name: '王先生', phone: '13900003333', address: '西城区金融街15号' },
     { name: '赵女士', phone: '13900004444', address: '东城区东长安街1号' },
     { name: '刘先生', phone: '13900005555', address: '丰台区方庄路5号' },
   ];
+
+  db.customers = customerDefs.map((c, index) => ({
+    id: index + 1,
+    name: c.name,
+    phone: c.phone,
+    addresses: [c.address],
+    totalOrders: 0,
+    createdAt: today.toISOString(),
+    updatedAt: today.toISOString(),
+  }));
+  db.nextCustomerId = customerDefs.length + 1;
 
   const serviceTypes = ['日常保洁', '深度保洁', '擦玻璃', '地板打蜡', '油烟机清洗'];
   const statuses: ('pending' | 'assigned' | 'in_progress' | 'completed' | 'cancelled')[] = [
@@ -133,7 +153,7 @@ function seedMockData(): void {
     const ordersPerDay = dayOffset >= 0 ? 2 + Math.floor(Math.random() * 2) : 1 + Math.floor(Math.random() * 2);
     
     for (let i = 0; i < ordersPerDay; i++) {
-      const customer = customers[Math.floor(Math.random() * customers.length)];
+      const customer = customerDefs[Math.floor(Math.random() * customerDefs.length)];
       const serviceType = serviceTypes[Math.floor(Math.random() * serviceTypes.length)];
       const status = dayOffset < 0 ? 'completed' : statuses[Math.floor(Math.random() * statuses.length)];
       
@@ -285,4 +305,83 @@ export function deleteOrder(id: number): boolean {
   db.orders.splice(index, 1);
   saveDatabase();
   return true;
+}
+
+export function getCustomers(): Customer[] {
+  return db.customers;
+}
+
+export function getCustomerById(id: number): Customer | undefined {
+  return db.customers.find(c => c.id === id);
+}
+
+export function getCustomerByPhone(phone: string): Customer | undefined {
+  return db.customers.find(c => c.phone === phone);
+}
+
+export function addCustomer(customer: Omit<Customer, 'id' | 'createdAt' | 'updatedAt'>): Customer {
+  const newCustomer: Customer = {
+    ...customer,
+    id: db.nextCustomerId++,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+  db.customers.push(newCustomer);
+  saveDatabase();
+  return newCustomer;
+}
+
+export function updateCustomer(id: number, updates: Partial<Customer>): Customer | undefined {
+  const index = db.customers.findIndex(c => c.id === id);
+  if (index === -1) return undefined;
+
+  db.customers[index] = {
+    ...db.customers[index],
+    ...updates,
+    id,
+    updatedAt: new Date().toISOString(),
+  };
+  saveDatabase();
+  return db.customers[index];
+}
+
+export function deleteCustomer(id: number): boolean {
+  const index = db.customers.findIndex(c => c.id === id);
+  if (index === -1) return false;
+  db.customers.splice(index, 1);
+  saveDatabase();
+  return true;
+}
+
+export function upsertCustomerFromOrder(order: Order): void {
+  const phone = order.customerPhone;
+  if (!phone) return;
+
+  let customer = db.customers.find(c => c.phone === phone);
+
+  if (!customer) {
+    customer = addCustomer({
+      name: order.customerName,
+      phone,
+      addresses: order.serviceAddress ? [order.serviceAddress] : [],
+      totalOrders: 1,
+      lastServiceDate: order.scheduledStartTime,
+    });
+  } else {
+    const addresses = [...customer.addresses];
+    if (order.serviceAddress && !addresses.includes(order.serviceAddress)) {
+      addresses.push(order.serviceAddress);
+    }
+    const customerOrders = db.orders.filter(o => o.customerPhone === phone);
+    const lastDate = customerOrders.length > 0
+      ? customerOrders.sort((a, b) => new Date(b.scheduledStartTime).getTime() - new Date(a.scheduledStartTime).getTime())[0].scheduledStartTime
+      : order.scheduledStartTime;
+
+    updateCustomer(customer.id, {
+      name: order.customerName,
+      addresses,
+      totalOrders: customerOrders.length,
+      lastServiceDate: lastDate,
+    });
+  }
 }

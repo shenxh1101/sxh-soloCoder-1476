@@ -8,6 +8,9 @@ import {
   User,
   AlertTriangle,
   Calendar as CalendarIcon,
+  X,
+  Phone,
+  MapPin,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import type { Order, Worker } from '../../shared/types';
@@ -19,6 +22,8 @@ const TIME_SLOTS = [
 
 const HOUR_HEIGHT = 72;
 
+const SERVICE_TYPES = ['日常保洁', '深度保洁', '擦玻璃', '地板打蜡', '油烟机清洗'];
+
 export default function ScheduleCalendarPage() {
   const navigate = useNavigate();
   const [currentDate, setCurrentDate] = useState(() => {
@@ -29,6 +34,10 @@ export default function ScheduleCalendarPage() {
   const [workers, setWorkers] = useState<Worker[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
+  const [workerFilter, setWorkerFilter] = useState<string>('all');
+  const [serviceTypeFilter, setServiceTypeFilter] = useState<string>('all');
+  const [popupOrder, setPopupOrder] = useState<Order | null>(null);
+  const [popupPosition, setPopupPosition] = useState<{ top: number; left: number } | null>(null);
 
   const weekDates = useMemo(() => {
     const startOfWeek = new Date(currentDate);
@@ -85,6 +94,7 @@ export default function ScheduleCalendarPage() {
   const getOrdersForSlot = (workerId: number, date: Date) => {
     return orders.filter(o => {
       if (o.workerId !== workerId) return false;
+      if (serviceTypeFilter !== 'all' && o.serviceType !== serviceTypeFilter) return false;
       const orderDate = new Date(o.scheduledStartTime).toDateString();
       return orderDate === date.toDateString();
     });
@@ -167,6 +177,27 @@ export default function ScheduleCalendarPage() {
     });
   };
 
+  const filteredWorkers = useMemo(() => {
+    if (workerFilter === 'all') return workers;
+    return workers.filter(w => String(w.id) === workerFilter);
+  }, [workers, workerFilter]);
+
+  const closePopup = () => {
+    setPopupOrder(null);
+    setPopupPosition(null);
+  };
+
+  const getStatusLabel = (status: string) => {
+    const labels: Record<string, string> = {
+      pending: '待派单',
+      assigned: '已派单',
+      in_progress: '进行中',
+      completed: '已完成',
+      cancelled: '已取消',
+    };
+    return labels[status] || status;
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full">
@@ -204,6 +235,27 @@ export default function ScheduleCalendarPage() {
           >
             今天
           </button>
+          <div className="h-6 w-px bg-stone-200 mx-1"></div>
+          <select
+            value={workerFilter}
+            onChange={e => setWorkerFilter(e.target.value)}
+            className="px-3 py-1.5 border border-stone-200 rounded-lg text-sm text-stone-600 bg-white hover:bg-stone-50 focus:outline-none focus:ring-2 focus:ring-primary-300"
+          >
+            <option value="all">全部阿姨</option>
+            {workers.map(w => (
+              <option key={w.id} value={String(w.id)}>{w.name}</option>
+            ))}
+          </select>
+          <select
+            value={serviceTypeFilter}
+            onChange={e => setServiceTypeFilter(e.target.value)}
+            className="px-3 py-1.5 border border-stone-200 rounded-lg text-sm text-stone-600 bg-white hover:bg-stone-50 focus:outline-none focus:ring-2 focus:ring-primary-300"
+          >
+            <option value="all">全部类型</option>
+            {SERVICE_TYPES.map(t => (
+              <option key={t} value={t}>{t}</option>
+            ))}
+          </select>
         </div>
         <button
           onClick={() => navigate('/orders/new')}
@@ -238,13 +290,13 @@ export default function ScheduleCalendarPage() {
         </div>
 
         <div className="flex-1 overflow-auto">
-          {workers.length === 0 ? (
+          {filteredWorkers.length === 0 ? (
             <div className="text-center py-16 text-stone-400">
               <CalendarIcon className="w-12 h-12 mx-auto mb-3 opacity-50" />
               <p>暂无在职阿姨</p>
             </div>
           ) : (
-            workers.map(worker => (
+            filteredWorkers.map(worker => (
               <div
                 key={worker.id}
                 className="grid border-b border-stone-100 last:border-b-0"
@@ -308,7 +360,9 @@ export default function ScheduleCalendarPage() {
                             style={{ top: `${pos.top}px`, height: `${pos.height}px` }}
                             onClick={(e) => {
                               e.stopPropagation();
-                              navigate(`/orders/${order.id}`);
+                              const rect = e.currentTarget.getBoundingClientRect();
+                              setPopupOrder(order);
+                              setPopupPosition({ top: rect.bottom + 4, left: rect.left });
                             }}
                           >
                             <p className="text-xs font-semibold truncate">{order.serviceType}</p>
@@ -354,6 +408,65 @@ export default function ScheduleCalendarPage() {
           </div>
         </div>
       </div>
+
+      {popupOrder && popupPosition && (
+        <div className="fixed inset-0 z-50" onClick={closePopup}>
+          <div
+            className="absolute bg-white rounded-xl shadow-xl border border-stone-200 w-72 p-4"
+            style={{ top: popupPosition.top, left: popupPosition.left }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-3">
+              <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${getStatusColor(popupOrder.status)}`}>
+                {getStatusLabel(popupOrder.status)}
+              </span>
+              <button onClick={closePopup} className="p-1 hover:bg-stone-100 rounded-lg transition-colors">
+                <X className="w-4 h-4 text-stone-400" />
+              </button>
+            </div>
+            <div className="space-y-2 text-sm">
+              <div className="flex items-center gap-2">
+                <User className="w-4 h-4 text-stone-400 shrink-0" />
+                <span className="font-medium text-stone-800">{popupOrder.customerName}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Phone className="w-4 h-4 text-stone-400 shrink-0" />
+                <span className="text-stone-600">{popupOrder.customerPhone}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <MapPin className="w-4 h-4 text-stone-400 shrink-0" />
+                <span className="text-stone-600 truncate">{popupOrder.serviceAddress}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Clock className="w-4 h-4 text-stone-400 shrink-0" />
+                <span className="text-stone-600">{formatTime(popupOrder.scheduledStartTime)} - {formatTime(popupOrder.scheduledEndTime)}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-stone-400 text-xs w-4 text-center shrink-0">类</span>
+                <span className="text-stone-600">{popupOrder.serviceType}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <User className="w-4 h-4 text-stone-400 shrink-0" />
+                <span className="text-stone-600">{workers.find(w => w.id === popupOrder.workerId)?.name || '未派单'}</span>
+              </div>
+            </div>
+            <div className="flex gap-2 mt-4">
+              <button
+                onClick={() => { closePopup(); navigate(`/orders/${popupOrder.id}`); }}
+                className="flex-1 px-3 py-1.5 bg-primary-500 text-white rounded-lg text-sm font-medium hover:bg-primary-600 transition-colors"
+              >
+                查看详情
+              </button>
+              <button
+                onClick={() => { closePopup(); navigate(`/orders/${popupOrder.id}`); }}
+                className="flex-1 px-3 py-1.5 border border-stone-200 text-stone-600 rounded-lg text-sm font-medium hover:bg-stone-50 transition-colors"
+              >
+                改派
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
