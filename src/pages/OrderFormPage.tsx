@@ -29,9 +29,9 @@ export default function OrderFormPage() {
   const [searchParams] = useSearchParams();
 
   const [formData, setFormData] = useState({
-    customerName: '',
+    customerName: searchParams.get('customerName') || '',
     customerPhone: searchParams.get('customerPhone') || '',
-    serviceAddress: '',
+    serviceAddress: searchParams.get('serviceAddress') || '',
     serviceType: '',
     scheduledDate: searchParams.get('date') || '',
     startTime: searchParams.get('startTime') || '09:00',
@@ -49,6 +49,23 @@ export default function OrderFormPage() {
   const [errors, setErrors] = useState<FormErrors>({});
   const [autoFillTip, setAutoFillTip] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>();
+
+  useEffect(() => {
+    const phone = searchParams.get('customerPhone');
+    if (phone) {
+      api.customers.getByPhone(phone).then(customer => {
+        if (customer) {
+          setFormData(prev => ({
+            ...prev,
+            customerName: customer.name || prev.customerName,
+            serviceAddress: customer.addresses?.[0] || prev.serviceAddress,
+          }));
+          setAutoFillTip(true);
+          setTimeout(() => setAutoFillTip(false), 3000);
+        }
+      }).catch(() => {});
+    }
+  }, []);
 
   useEffect(() => {
     const phone = formData.customerPhone.trim();
@@ -92,12 +109,13 @@ export default function OrderFormPage() {
       const startTime = `${formData.scheduledDate}T${formData.startTime}:00`;
       const endTime = `${formData.scheduledDate}T${formData.endTime}:00`;
 
-      const workers = await api.workers.available({
+      const result = await api.workers.available({
         serviceType: formData.serviceType,
         startTime,
         endTime,
       });
 
+      const workers = result.available;
       setRecommendedWorkers(workers);
       setShowRecommendation(true);
       if (workers.length > 0) {
@@ -176,7 +194,12 @@ export default function OrderFormPage() {
         notes: formData.notes.trim() || undefined,
       });
 
-      navigate('/orders');
+      const returnTo = searchParams.get('returnTo');
+      if (returnTo) {
+        navigate(returnTo);
+      } else {
+        navigate('/orders');
+      }
     } catch (e: any) {
       alert(e.message || '创建失败');
     } finally {
@@ -247,7 +270,7 @@ export default function OrderFormPage() {
                 {autoFillTip && (
                   <p className="mt-1.5 text-sm text-green-600 flex items-center gap-1">
                     <CheckCircle className="w-4 h-4" />
-                    已自动填充客户信息
+                    已自动填充老客户信息（姓名、地址）
                   </p>
                 )}
               </div>

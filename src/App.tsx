@@ -8,6 +8,7 @@ import OrderFormPage from "@/pages/OrderFormPage";
 import OrderDetailPage from "@/pages/OrderDetailPage";
 import ScheduleCalendarPage from "@/pages/ScheduleCalendarPage";
 import CustomersPage from "@/pages/CustomersPage";
+import CustomerDetailPage from "@/pages/CustomerDetailPage";
 import TimeTrackingPage from "@/pages/TimeTrackingPage";
 import PerformancePage from "@/pages/PerformancePage";
 import ReviewsPage from "@/pages/ReviewsPage";
@@ -27,6 +28,7 @@ export default function App() {
           <Route path="/orders/:id" element={<OrderDetailPage />} />
           <Route path="/schedule" element={<ScheduleCalendarPage />} />
           <Route path="/customers" element={<CustomersPage />} />
+          <Route path="/customers/:id" element={<CustomerDetailPage />} />
           <Route path="/time-tracking" element={<TimeTrackingPage />} />
           <Route path="/performance" element={<PerformancePage />} />
           <Route path="/reviews" element={<ReviewsPage />} />

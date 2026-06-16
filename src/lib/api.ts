@@ -1,4 +1,4 @@
-import type { Worker, Order, MonthlyPerformance, WorkerWithScore, Customer } from '../../shared/types';
+import type { Worker, Order, MonthlyPerformance, WorkerWithScore, Customer, FollowUp, FollowUpType, CustomerProfile, WorkerUnavailability } from '../../shared/types';
 
 const API_BASE = '/api';
 
@@ -40,9 +40,13 @@ export const api = {
     delete: (id: number) => request<{ message: string }>(`/workers/${id}`, {
       method: 'DELETE',
     }),
-    available: (params: { serviceType: string; startTime: string; endTime: string }) => {
-      const query = new URLSearchParams(params);
-      return request<WorkerWithScore[]>(`/workers/available?${query.toString()}`);
+    available: (params: { serviceType: string; startTime: string; endTime: string; orderId?: number }) => {
+      const query = new URLSearchParams();
+      if (params.serviceType) query.set('serviceType', params.serviceType);
+      if (params.startTime) query.set('startTime', params.startTime);
+      if (params.endTime) query.set('endTime', params.endTime);
+      if (params.orderId) query.set('orderId', String(params.orderId));
+      return request<{ available: WorkerWithScore[]; unavailable: Array<WorkerUnavailability & { skills?: string[] }> }>(`/workers/available?${query.toString()}`);
     },
   },
   orders: {
@@ -77,18 +81,24 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(data),
     }),
-    reassign: (id: number, workerId: number) => request<Order>(`/orders/${id}/reassign`, {
+    reassign: (id: number, workerId: number, reason?: string) => request<Order>(`/orders/${id}/reassign`, {
       method: 'POST',
-      body: JSON.stringify({ workerId }),
+      body: JSON.stringify({ workerId, reason }),
     }),
-    cancel: (id: number) => request<Order>(`/orders/${id}/cancel`, {
+    cancel: (id: number, reason?: string) => request<Order>(`/orders/${id}/cancel`, {
       method: 'POST',
+      body: JSON.stringify({ reason }),
+    }),
+    followups: (id: number) => request<FollowUp[]>(`/orders/${id}/followups`),
+    addFollowUp: (id: number, type: FollowUpType, content: string, createdBy?: string) => request<FollowUp>(`/orders/${id}/followups`, {
+      method: 'POST',
+      body: JSON.stringify({ type, content, createdBy }),
     }),
   },
   customers: {
     list: () => request<Customer[]>('/customers'),
-    get: (id: number) => request<Customer>(`/customers/${id}`),
-    getByPhone: (phone: string) => request<Customer & { recentOrders?: Order[] }>(`/customers/phone/${encodeURIComponent(phone)}`),
+    get: (id: number) => request<CustomerProfile & { orders: Order[]; followups: FollowUp[] }>(`/customers/${id}`),
+    getByPhone: (phone: string) => request<CustomerProfile & { recentOrders?: Order[] }>(`/customers/phone/${encodeURIComponent(phone)}`),
     create: (data: Partial<Customer>) => request<Customer>('/customers', {
       method: 'POST',
       body: JSON.stringify(data),

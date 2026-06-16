@@ -59,6 +59,44 @@ export interface WorkerWithScore extends Worker {
   matchScore: number;
 }
 
+export type FollowUpType = 'phone_call' | 'time_change' | 'worker_feedback' | 'reassign' | 'cancel' | 'other';
+
+export interface FollowUp {
+  id: number;
+  orderId: number;
+  type: FollowUpType;
+  content: string;
+  createdBy: string;
+  createdAt: string;
+}
+
+export interface WorkerUnavailability {
+  workerId: number;
+  workerName: string;
+  reason: 'skill_mismatch' | 'time_conflict' | 'inactive';
+  detail: string;
+  conflictOrderId?: number;
+}
+
+export interface CustomerProfile {
+  id: number;
+  name: string;
+  phone: string;
+  addresses: string[];
+  totalOrders: number;
+  lastServiceDate?: string;
+  frequentServiceType?: string;
+  frequentWorkerId?: number;
+  frequentWorkerName?: string;
+  totalHours: number;
+  totalSpending: number;
+  positiveReviews: number;
+  negativeReviews: number;
+  neutralReviews: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface Customer {
   id: number;
   name: string;

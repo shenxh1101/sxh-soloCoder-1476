@@ -1,0 +1,10 @@
+[
+  {
+    "orderId": 1,
+    "type": "phone_call",
+    "content": "客户来电确认服务时间，要求上午10点开始",
+    "createdBy": "管理员",
+    "id": 1,
+    "createdAt": "2026-06-16T08:44:11.314Z"
+  }
+]

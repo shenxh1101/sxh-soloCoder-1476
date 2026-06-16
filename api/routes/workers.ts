@@ -6,6 +6,7 @@ import {
   updateWorker,
   deleteWorker,
   getOrders,
+  getWorkerAvailability,
 } from '../db/index.js';
 import type { Worker, WorkerWithScore } from '../../shared/types.js';
 
@@ -27,7 +28,7 @@ router.get('/', (req, res) => {
 });
 
 router.get('/available', (req, res) => {
-  const { serviceType, startTime, endTime } = req.query;
+  const { serviceType, startTime, endTime, orderId } = req.query;
   
   if (!serviceType || !startTime || !endTime) {
     return res.status(400).json({ error: '缺少必要参数: serviceType, startTime, endTime' });
@@ -35,38 +36,41 @@ router.get('/available', (req, res) => {
   
   const start = new Date(startTime as string);
   const end = new Date(endTime as string);
+  const excludeOrderId = orderId ? parseInt(orderId as string) : undefined;
   
-  const allWorkers = getWorkers().filter(w => 
-    w.status === 'active' && w.skills.includes(serviceType as string)
+  const { available, unavailable } = getWorkerAvailability(
+    serviceType as string,
+    startTime as string,
+    endTime as string,
+    excludeOrderId
   );
   
   const allOrders = getOrders();
   
-  const workersWithScore: WorkerWithScore[] = allWorkers.map(worker => {
-    const hasConflict = allOrders.some(order => {
-      if (order.workerId !== worker.id) return false;
-      if (order.status === 'cancelled' || order.status === 'completed') return false;
-      
-      const orderStart = new Date(order.scheduledStartTime);
-      const orderEnd = new Date(order.scheduledEndTime);
-      
-      return start < orderEnd && end > orderStart;
-    });
-    
+  const workersWithScore: WorkerWithScore[] = available.map(worker => {
     const completedOrders = allOrders.filter(o => 
       o.workerId === worker.id && o.status === 'completed'
     ).length;
     
-    const score = hasConflict ? -1 : (completedOrders * 10 + worker.hourlyRate);
+    const score = completedOrders * 10 + worker.hourlyRate;
     
     return {
       ...worker,
-      matchScore: hasConflict ? 0 : Math.max(10, score),
+      matchScore: Math.max(10, score),
     } as WorkerWithScore;
-  }).filter(w => w.matchScore > 0)
-    .sort((a, b) => b.matchScore - a.matchScore);
+  }).sort((a, b) => b.matchScore - a.matchScore);
   
-  res.json(workersWithScore);
+  res.json({
+    available: workersWithScore,
+    unavailable: unavailable.map(u => ({
+      workerId: u.worker.id,
+      workerName: u.worker.name,
+      reason: u.reason,
+      reasonType: u.reasonType,
+      conflictOrderId: u.conflictOrderId,
+      skills: u.worker.skills,
+    })),
+  });
 });
 
 router.get('/:id', (req, res) => {

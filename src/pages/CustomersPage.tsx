@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Users, Phone, MapPin, Calendar, Search, Plus, ChevronDown, ChevronUp, Star, ThumbsUp, ThumbsDown } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { Users, Phone, MapPin, Calendar, Search, Plus, ChevronDown, ChevronUp, Star, ThumbsUp, ThumbsDown, Eye } from 'lucide-react';
+import { useNavigate, Link } from 'react-router-dom';
 import { api } from '../lib/api';
 import type { Customer, Order } from '../../shared/types';
 
@@ -120,12 +120,14 @@ export default function CustomersPage() {
                 <div className="p-5">
                   <div className="flex items-start justify-between">
                     <div className="flex items-start gap-4">
-                      <div className="w-12 h-12 rounded-full bg-primary-100 flex items-center justify-center text-primary-600 font-bold text-lg flex-shrink-0">
+                      <Link to={`/customers/${customer.id}`} className="w-12 h-12 rounded-full bg-primary-100 flex items-center justify-center text-primary-600 font-bold text-lg flex-shrink-0 hover:bg-primary-200 transition-colors">
                         {customer.name.charAt(0)}
-                      </div>
+                      </Link>
                       <div className="space-y-2">
                         <div className="flex items-center gap-3">
-                          <h3 className="font-semibold text-stone-800 text-lg">{customer.name}</h3>
+                          <Link to={`/customers/${customer.id}`} className="font-semibold text-stone-800 text-lg hover:text-primary-600 transition-colors">
+                            {customer.name}
+                          </Link>
                           <div className="flex items-center text-stone-500 text-sm">
                             <Phone className="w-4 h-4 mr-1" />
                             {customer.phone}
@@ -157,8 +159,15 @@ export default function CustomersPage() {
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
+                      <Link
+                        to={`/customers/${customer.id}`}
+                        className="flex items-center px-3 py-1.5 border border-stone-200 text-stone-600 rounded-lg hover:bg-stone-50 transition-colors text-sm font-medium"
+                      >
+                        <Eye className="w-4 h-4 mr-1" />
+                        详情
+                      </Link>
                       <button
-                        onClick={() => navigate(`/orders/new?customerPhone=${customer.phone}`)}
+                        onClick={() => navigate(`/orders/new?customerPhone=${customer.phone}&customerName=${encodeURIComponent(customer.name)}&serviceAddress=${encodeURIComponent(customer.addresses[0] || '')}&returnTo=/customers/${customer.id}`)}
                         className="flex items-center px-3 py-1.5 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors text-sm font-medium"
                       >
                         <Plus className="w-4 h-4 mr-1" />

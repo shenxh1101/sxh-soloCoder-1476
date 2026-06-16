@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import type { Worker, Order, Customer } from '../../shared/types.js';
+import type { Worker, Order, Customer, FollowUp } from '../../shared/types.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -10,6 +10,7 @@ const DATA_DIR = path.join(__dirname, '../../data');
 const WORKERS_FILE = path.join(DATA_DIR, 'workers.json');
 const ORDERS_FILE = path.join(DATA_DIR, 'orders.json');
 const CUSTOMERS_FILE = path.join(DATA_DIR, 'customers.json');
+const FOLLOWUPS_FILE = path.join(DATA_DIR, 'followups.json');
 
 function ensureDataDir() {
   if (!fs.existsSync(DATA_DIR)) {
@@ -39,24 +40,29 @@ export interface Database {
   workers: Worker[];
   orders: Order[];
   customers: Customer[];
+  followups: FollowUp[];
   nextWorkerId: number;
   nextOrderId: number;
   nextCustomerId: number;
+  nextFollowUpId: number;
 }
 
 const db: Database = {
   workers: [],
   orders: [],
   customers: [],
+  followups: [],
   nextWorkerId: 1,
   nextOrderId: 1,
   nextCustomerId: 1,
+  nextFollowUpId: 1,
 };
 
 export function loadDatabase(): void {
   const workers = readJSONFile<Worker[]>(WORKERS_FILE, []);
   const orders = readJSONFile<Order[]>(ORDERS_FILE, []);
   const customers = readJSONFile<Customer[]>(CUSTOMERS_FILE, []);
+  const followups = readJSONFile<FollowUp[]>(FOLLOWUPS_FILE, []);
 
   if (workers.length === 0 && orders.length === 0 && customers.length === 0) {
     seedMockData();
@@ -64,9 +70,11 @@ export function loadDatabase(): void {
     db.workers = workers;
     db.orders = orders;
     db.customers = customers;
+    db.followups = followups;
     db.nextWorkerId = workers.length > 0 ? Math.max(...workers.map(w => w.id)) + 1 : 1;
     db.nextOrderId = orders.length > 0 ? Math.max(...orders.map(o => o.id)) + 1 : 1;
     db.nextCustomerId = customers.length > 0 ? Math.max(...customers.map(c => c.id)) + 1 : 1;
+    db.nextFollowUpId = followups.length > 0 ? Math.max(...followups.map(f => f.id)) + 1 : 1;
   }
 }
 
@@ -74,6 +82,7 @@ export function saveDatabase(): void {
   writeJSONFile(WORKERS_FILE, db.workers);
   writeJSONFile(ORDERS_FILE, db.orders);
   writeJSONFile(CUSTOMERS_FILE, db.customers);
+  writeJSONFile(FOLLOWUPS_FILE, db.followups);
 }
 
 function seedMockData(): void {
@@ -384,4 +393,74 @@ export function upsertCustomerFromOrder(order: Order): void {
       lastServiceDate: lastDate,
     });
   }
+}
+
+export function getFollowUpsByOrderId(orderId: number): FollowUp[] {
+  return db.followups
+    .filter(f => f.orderId === orderId)
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+}
+
+export function getFollowUpsByCustomerPhone(phone: string): FollowUp[] {
+  const orderIds = db.orders
+    .filter(o => o.customerPhone === phone)
+    .map(o => o.id);
+  return db.followups
+    .filter(f => orderIds.includes(f.orderId))
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+}
+
+export function addFollowUp(followUp: Omit<FollowUp, 'id' | 'createdAt'>): FollowUp {
+  const newFollowUp: FollowUp = {
+    ...followUp,
+    id: db.nextFollowUpId++,
+    createdAt: new Date().toISOString(),
+  };
+  db.followups.push(newFollowUp);
+  saveDatabase();
+  return newFollowUp;
+}
+
+export function getWorkerAvailability(
+  serviceType: string,
+  startTime: string,
+  endTime: string,
+  excludeOrderId?: number
+): { available: Worker[]; unavailable: Array<{ worker: Worker; reason: string; reasonType: 'skill_mismatch' | 'time_conflict' | 'inactive'; conflictOrderId?: number }> } {
+  const start = new Date(startTime);
+  const end = new Date(endTime);
+  const allWorkers = getWorkers();
+  const available: Worker[] = [];
+  const unavailable: Array<{ worker: Worker; reason: string; reasonType: 'skill_mismatch' | 'time_conflict' | 'inactive'; conflictOrderId?: number }> = [];
+
+  for (const worker of allWorkers) {
+    if (worker.status !== 'active') {
+      unavailable.push({ worker, reason: '该阿姨当前状态为停用', reasonType: 'inactive' });
+      continue;
+    }
+    if (!worker.skills.includes(serviceType)) {
+      unavailable.push({ worker, reason: `技能不匹配（需${serviceType}，该阿姨擅长：${worker.skills.join('、')}）`, reasonType: 'skill_mismatch' });
+      continue;
+    }
+    const conflict = db.orders.find(order => {
+      if (order.workerId !== worker.id) return false;
+      if (order.status === 'cancelled' || order.status === 'completed') return false;
+      if (excludeOrderId && order.id === excludeOrderId) return false;
+      const orderStart = new Date(order.scheduledStartTime);
+      const orderEnd = new Date(order.scheduledEndTime);
+      return start < orderEnd && end > orderStart;
+    });
+    if (conflict) {
+      unavailable.push({
+        worker,
+        reason: `时间冲突（与订单 #${conflict.id} ${new Date(conflict.scheduledStartTime).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}-${new Date(conflict.scheduledEndTime).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}重叠）`,
+        reasonType: 'time_conflict',
+        conflictOrderId: conflict.id,
+      });
+      continue;
+    }
+    available.push(worker);
+  }
+
+  return { available, unavailable };
 }

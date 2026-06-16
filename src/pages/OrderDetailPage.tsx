@@ -22,9 +22,12 @@ import {
   RefreshCw,
   XCircle,
   AlertTriangle,
+  Plus,
+  Send,
+  UserX,
 } from 'lucide-react';
 import { api } from '../lib/api';
-import type { Order, Worker, ReviewRating } from '../../shared/types';
+import type { Order, Worker, ReviewRating, FollowUp, FollowUpType, WorkerUnavailability } from '../../shared/types';
 
 export default function OrderDetailPage() {
   const navigate = useNavigate();
@@ -49,6 +52,16 @@ export default function OrderDetailPage() {
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [cancelling, setCancelling] = useState(false);
 
+  const [followups, setFollowups] = useState<FollowUp[]>([]);
+  const [showFollowUpForm, setShowFollowUpForm] = useState(false);
+  const [followUpForm, setFollowUpForm] = useState<{ type: FollowUpType; content: string }>({
+    type: 'phone_call',
+    content: '',
+  });
+  const [savingFollowUp, setSavingFollowUp] = useState(false);
+  const [unavailableWorkers, setUnavailableWorkers] = useState<(WorkerUnavailability & { skills?: string[] })[]>([]);
+  const [reassignReason, setReassignReason] = useState('');
+
   useEffect(() => {
     loadOrder();
   }, [orderId]);
@@ -72,6 +85,9 @@ export default function OrderDetailPage() {
           comment: orderData.review.comment || '',
         });
       }
+
+      const followupsData = await api.orders.followups(orderId);
+      setFollowups(followupsData);
     } catch (e) {
       console.error('加载订单失败', e);
       alert('加载订单失败');
@@ -125,12 +141,14 @@ export default function OrderDetailPage() {
     setShowReassignPanel(true);
     setLoadingWorkers(true);
     try {
-      const workers = await api.workers.available({
+      const result = await api.workers.available({
         serviceType: order.serviceType,
         startTime: order.scheduledStartTime,
         endTime: order.scheduledEndTime,
+        orderId: order.id,
       });
-      setAvailableWorkers(workers);
+      setAvailableWorkers(result.available);
+      setUnavailableWorkers(result.unavailable);
     } catch (e: any) {
       alert(e.message || '获取可用阿姨失败');
     } finally {
@@ -138,17 +156,36 @@ export default function OrderDetailPage() {
     }
   }
 
-  async function handleConfirmReassign(workerId: number) {
+  async function handleConfirmReassign(workerId: number, reason?: string) {
     if (!order) return;
     setReassigning(true);
     try {
-      await api.orders.reassign(order.id, workerId);
+      await api.orders.reassign(order.id, workerId, reason);
       setShowReassignPanel(false);
+      setReassignReason('');
       await loadOrder();
+      const updatedFollowups = await api.orders.followups(order.id);
+      setFollowups(updatedFollowups);
     } catch (e: any) {
       alert(e.message || '改派失败');
     } finally {
       setReassigning(false);
+    }
+  }
+
+  async function handleSaveFollowUp() {
+    if (!order || !followUpForm.content.trim()) return;
+    setSavingFollowUp(true);
+    try {
+      await api.orders.addFollowUp(order.id, followUpForm.type, followUpForm.content.trim());
+      const updatedFollowups = await api.orders.followups(order.id);
+      setFollowups(updatedFollowups);
+      setFollowUpForm({ type: 'phone_call', content: '' });
+      setShowFollowUpForm(false);
+    } catch (e: any) {
+      alert(e.message || '保存跟进记录失败');
+    } finally {
+      setSavingFollowUp(false);
     }
   }
 
@@ -425,67 +462,115 @@ export default function OrderDetailPage() {
                   </button>
                 </div>
 
+                <div className="mb-3">
+                  <label className="block text-sm font-medium text-stone-600 mb-1">改派原因（选填）</label>
+                  <textarea
+                    value={reassignReason}
+                    onChange={e => setReassignReason(e.target.value)}
+                    rows={2}
+                    className="w-full px-3 py-2 border border-stone-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white resize-none text-sm"
+                    placeholder="请输入改派原因..."
+                  />
+                </div>
+
                 {loadingWorkers ? (
                   <div className="flex items-center justify-center py-8">
                     <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500"></div>
                   </div>
-                ) : availableWorkers.length === 0 ? (
-                  <div className="text-center py-6 text-stone-500">
-                    <AlertTriangle className="w-8 h-8 mx-auto mb-2 text-warning-500" />
-                    <p>当前时段没有可用的阿姨</p>
-                  </div>
                 ) : (
-                  <div className="space-y-2 max-h-64 overflow-y-auto">
-                    <div className="flex items-center gap-2 px-3 py-2 bg-warning-50 border border-warning-200 rounded-lg text-sm text-warning-700 mb-3">
-                      <AlertTriangle className="w-4 h-4 flex-shrink-0" />
-                      <span>改派将更换当前服务阿姨，请确认新阿姨时间无冲突</span>
-                    </div>
-                    {availableWorkers.map(w => {
-                      const isCurrentWorker = w.id === order.workerId;
-                      return (
-                        <button
-                          key={w.id}
-                          onClick={() => !isCurrentWorker && handleConfirmReassign(w.id)}
-                          disabled={reassigning || isCurrentWorker}
-                          className={`w-full flex items-center p-3 rounded-lg border transition-colors text-left ${
-                            isCurrentWorker
-                              ? 'bg-stone-100 border-stone-200 opacity-50 cursor-not-allowed'
-                              : 'bg-white border-stone-200 hover:border-primary-300 hover:bg-primary-50'
-                          }`}
-                        >
-                          <div className="w-10 h-10 rounded-full bg-primary-100 flex items-center justify-center text-primary-600 font-bold">
-                            {w.name.charAt(0)}
-                          </div>
-                          <div className="ml-3 flex-1">
-                            <p className="font-medium text-stone-800">
-                              {w.name}
-                              {isCurrentWorker && (
-                                <span className="ml-2 text-xs text-stone-400">（当前阿姨）</span>
+                  <>
+                    {availableWorkers.length === 0 ? (
+                      <div className="text-center py-6 text-stone-500">
+                        <AlertTriangle className="w-8 h-8 mx-auto mb-2 text-warning-500" />
+                        <p>当前时段没有可用的阿姨</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-2 max-h-64 overflow-y-auto">
+                        <div className="flex items-center gap-2 px-3 py-2 bg-warning-50 border border-warning-200 rounded-lg text-sm text-warning-700 mb-3">
+                          <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                          <span>改派将更换当前服务阿姨，请确认新阿姨时间无冲突</span>
+                        </div>
+                        {availableWorkers.map(w => {
+                          const isCurrentWorker = w.id === order.workerId;
+                          return (
+                            <button
+                              key={w.id}
+                              onClick={() => !isCurrentWorker && handleConfirmReassign(w.id, reassignReason || undefined)}
+                              disabled={reassigning || isCurrentWorker}
+                              className={`w-full flex items-center p-3 rounded-lg border transition-colors text-left ${
+                                isCurrentWorker
+                                  ? 'bg-stone-100 border-stone-200 opacity-50 cursor-not-allowed'
+                                  : 'bg-white border-stone-200 hover:border-primary-300 hover:bg-primary-50'
+                              }`}
+                            >
+                              <div className="w-10 h-10 rounded-full bg-primary-100 flex items-center justify-center text-primary-600 font-bold">
+                                {w.name.charAt(0)}
+                              </div>
+                              <div className="ml-3 flex-1">
+                                <p className="font-medium text-stone-800">
+                                  {w.name}
+                                  {isCurrentWorker && (
+                                    <span className="ml-2 text-xs text-stone-400">（当前阿姨）</span>
+                                  )}
+                                </p>
+                                <p className="text-sm text-stone-500">{w.phone}</p>
+                                <div className="flex flex-wrap gap-1 mt-1">
+                                  {w.skills.map(skill => (
+                                    <span
+                                      key={skill}
+                                      className={`px-1.5 py-0.5 rounded text-xs ${
+                                        skill === order.serviceType
+                                          ? 'bg-primary-100 text-primary-600 font-medium'
+                                          : 'bg-stone-200 text-stone-600'
+                                      }`}
+                                    >
+                                      {skill}
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                              {!isCurrentWorker && (
+                                <RefreshCw className={`w-5 h-5 text-primary-500 flex-shrink-0 ${reassigning ? 'animate-spin' : ''}`} />
                               )}
-                            </p>
-                            <p className="text-sm text-stone-500">{w.phone}</p>
-                            <div className="flex flex-wrap gap-1 mt-1">
-                              {w.skills.map(skill => (
-                                <span
-                                  key={skill}
-                                  className={`px-1.5 py-0.5 rounded text-xs ${
-                                    skill === order.serviceType
-                                      ? 'bg-primary-100 text-primary-600 font-medium'
-                                      : 'bg-stone-200 text-stone-600'
-                                  }`}
-                                >
-                                  {skill}
-                                </span>
-                              ))}
-                            </div>
-                          </div>
-                          {!isCurrentWorker && (
-                            <RefreshCw className={`w-5 h-5 text-primary-500 flex-shrink-0 ${reassigning ? 'animate-spin' : ''}`} />
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {unavailableWorkers.length > 0 && (
+                      <div className="mt-4 pt-4 border-t border-stone-200">
+                        <h5 className="text-sm font-semibold text-stone-500 mb-3">不可用阿姨</h5>
+                        <div className="space-y-2">
+                          {unavailableWorkers.map(uw => {
+                            const reasonIcons: Record<string, any> = {
+                              skill_mismatch: AlertCircle,
+                              time_conflict: Clock,
+                              inactive: UserX,
+                            };
+                            const ReasonIcon = reasonIcons[uw.reason] || AlertCircle;
+                            return (
+                              <div
+                                key={uw.workerId}
+                                className="flex items-center p-3 rounded-lg border border-stone-200 bg-stone-50 opacity-60"
+                              >
+                                <div className="w-10 h-10 rounded-full bg-stone-200 flex items-center justify-center text-stone-500 font-bold">
+                                  {uw.workerName.charAt(0)}
+                                </div>
+                                <div className="ml-3 flex-1">
+                                  <p className="font-medium text-stone-600">{uw.workerName}</p>
+                                  <div className="flex items-center gap-1.5 mt-0.5">
+                                    <ReasonIcon className="w-3.5 h-3.5 text-amber-500" />
+                                    <span className="text-xs text-amber-600">{uw.detail}</span>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             )}
@@ -667,6 +752,147 @@ export default function OrderDetailPage() {
                   <p>服务完成后可录入评价</p>
                 </>
               )}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="bg-white rounded-xl border border-stone-200 shadow-sm overflow-hidden">
+        <div className="p-6 border-b border-stone-100">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-stone-500 uppercase tracking-wider">
+              <span className="inline-flex items-center gap-1.5">
+                <MessageSquare className="w-4 h-4" />
+                跟进记录
+              </span>
+            </h3>
+            {order.status !== 'cancelled' && (
+              <button
+                onClick={() => setShowFollowUpForm(true)}
+                disabled={showFollowUpForm}
+                className="flex items-center gap-1.5 text-sm text-primary-600 hover:text-primary-700 font-medium disabled:opacity-50"
+              >
+                <Plus className="w-4 h-4" />
+                添加跟进
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div className="p-6">
+          {followups.length === 0 && !showFollowUpForm ? (
+            <div className="text-center py-8 text-stone-400">
+              <MessageSquare className="w-10 h-10 mx-auto mb-2 opacity-50" />
+              <p>暂无跟进记录</p>
+            </div>
+          ) : (
+            <div className="space-y-0">
+              {followups.map((fu, idx) => {
+                const typeLabels: Record<FollowUpType, string> = {
+                  phone_call: '电话跟进',
+                  time_change: '时间变更',
+                  worker_feedback: '阿姨反馈',
+                  reassign: '改派记录',
+                  cancel: '取消记录',
+                  other: '其他',
+                };
+                const typeColors: Record<FollowUpType, string> = {
+                  phone_call: 'bg-blue-400',
+                  time_change: 'bg-amber-400',
+                  worker_feedback: 'bg-purple-400',
+                  reassign: 'bg-primary-400',
+                  cancel: 'bg-red-400',
+                  other: 'bg-stone-400',
+                };
+                const badgeColors: Record<FollowUpType, string> = {
+                  phone_call: 'bg-blue-100 text-blue-700',
+                  time_change: 'bg-amber-100 text-amber-700',
+                  worker_feedback: 'bg-purple-100 text-purple-700',
+                  reassign: 'bg-primary-100 text-primary-700',
+                  cancel: 'bg-red-100 text-red-700',
+                  other: 'bg-stone-100 text-stone-700',
+                };
+                return (
+                  <div key={fu.id} className="flex gap-4">
+                    <div className="flex flex-col items-center">
+                      <div className={`w-3 h-3 rounded-full ${typeColors[fu.type]} flex-shrink-0 mt-1.5`} />
+                      {idx < followups.length - 1 && (
+                        <div className="w-0.5 flex-1 bg-stone-200 mt-1" />
+                      )}
+                    </div>
+                    <div className="flex-1 pb-6">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className={`px-2 py-0.5 rounded text-xs font-medium ${badgeColors[fu.type]}`}>
+                          {typeLabels[fu.type]}
+                        </span>
+                      </div>
+                      <p className="text-stone-700">{fu.content}</p>
+                      <div className="flex items-center gap-3 mt-1.5 text-xs text-stone-400">
+                        <span>{fu.createdBy}</span>
+                        <span>{formatDateTime(fu.createdAt)}</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {showFollowUpForm && (
+            <div className="mt-4 bg-stone-50 rounded-lg p-5 border border-stone-200">
+              <p className="text-sm font-medium text-stone-700 mb-3">跟进类型</p>
+              <div className="flex flex-wrap gap-2 mb-4">
+                {([
+                  { value: 'phone_call' as FollowUpType, label: '电话跟进' },
+                  { value: 'time_change' as FollowUpType, label: '时间变更' },
+                  { value: 'worker_feedback' as FollowUpType, label: '阿姨反馈' },
+                  { value: 'reassign' as FollowUpType, label: '改派记录' },
+                  { value: 'cancel' as FollowUpType, label: '取消记录' },
+                  { value: 'other' as FollowUpType, label: '其他' },
+                ]).map(item => (
+                  <button
+                    key={item.value}
+                    type="button"
+                    onClick={() => setFollowUpForm({ ...followUpForm, type: item.value })}
+                    className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-all ${
+                      followUpForm.type === item.value
+                        ? 'bg-primary-500 text-white border-primary-500'
+                        : 'bg-white text-stone-600 border-stone-200 hover:border-primary-300'
+                    }`}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+              <p className="text-sm font-medium text-stone-700 mb-2">跟进内容</p>
+              <textarea
+                value={followUpForm.content}
+                onChange={e => setFollowUpForm({ ...followUpForm, content: e.target.value })}
+                rows={3}
+                className="w-full px-4 py-2.5 border border-stone-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white resize-none"
+                placeholder="请输入跟进内容..."
+              />
+              <div className="flex justify-end gap-3 mt-4">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowFollowUpForm(false);
+                    setFollowUpForm({ type: 'phone_call', content: '' });
+                  }}
+                  className="px-5 py-2 border border-stone-200 text-stone-600 rounded-lg hover:bg-stone-50 transition-colors font-medium"
+                >
+                  取消
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveFollowUp}
+                  disabled={savingFollowUp || !followUpForm.content.trim()}
+                  className="flex items-center gap-2 px-5 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors font-medium disabled:opacity-50"
+                >
+                  <Send className="w-4 h-4" />
+                  {savingFollowUp ? '保存中...' : '保存跟进'}
+                </button>
+              </div>
             </div>
           )}
         </div>

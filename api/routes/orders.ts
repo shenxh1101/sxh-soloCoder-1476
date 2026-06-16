@@ -6,8 +6,12 @@ import {
   updateOrder,
   deleteOrder,
   upsertCustomerFromOrder,
+  getFollowUpsByOrderId,
+  addFollowUp,
+  getWorkers,
+  getWorkerById,
 } from '../db/index.js';
-import type { OrderStatus, ReviewRating } from '../../shared/types.js';
+import type { OrderStatus, ReviewRating, FollowUpType } from '../../shared/types.js';
 
 const router = Router();
 
@@ -191,7 +195,7 @@ router.post('/:id/review', (req, res) => {
 
 router.post('/:id/reassign', (req, res) => {
   const id = parseInt(req.params.id);
-  const { workerId } = req.body;
+  const { workerId, reason } = req.body;
 
   if (!workerId) {
     return res.status(400).json({ error: '请指定新的阿姨' });
@@ -206,9 +210,27 @@ router.post('/:id/reassign', (req, res) => {
     return res.status(400).json({ error: '当前订单状态不支持改派' });
   }
 
+  const oldWorkerId = order.workerId;
+  const oldWorker = oldWorkerId ? getWorkerById(oldWorkerId) : null;
+  const newWorker = getWorkerById(workerId);
+
   const updatedOrder = updateOrder(id, {
     workerId,
     status: 'assigned',
+  });
+
+  let content = oldWorker
+    ? `改派：${oldWorker.name} → ${newWorker?.name || '阿姨#' + workerId}`
+    : `指派：${newWorker?.name || '阿姨#' + workerId}`;
+  if (reason) {
+    content += `（原因：${reason}）`;
+  }
+
+  addFollowUp({
+    orderId: id,
+    type: 'reassign',
+    content,
+    createdBy: '管理员',
   });
 
   res.json(updatedOrder);
@@ -216,6 +238,7 @@ router.post('/:id/reassign', (req, res) => {
 
 router.post('/:id/cancel', (req, res) => {
   const id = parseInt(req.params.id);
+  const { reason } = req.body;
   const order = getOrderById(id);
 
   if (!order) {
@@ -230,7 +253,56 @@ router.post('/:id/cancel', (req, res) => {
     status: 'cancelled',
   });
 
+  let content = '订单已取消';
+  if (reason) {
+    content += `（原因：${reason}）`;
+  }
+
+  addFollowUp({
+    orderId: id,
+    type: 'cancel',
+    content,
+    createdBy: '管理员',
+  });
+
   res.json(updatedOrder);
+});
+
+router.get('/:id/followups', (req, res) => {
+  const id = parseInt(req.params.id);
+  const order = getOrderById(id);
+  if (!order) {
+    return res.status(404).json({ error: '订单不存在' });
+  }
+  res.json(getFollowUpsByOrderId(id));
+});
+
+router.post('/:id/followups', (req, res) => {
+  const id = parseInt(req.params.id);
+  const { type, content, createdBy } = req.body;
+
+  const order = getOrderById(id);
+  if (!order) {
+    return res.status(404).json({ error: '订单不存在' });
+  }
+
+  if (!type || !content) {
+    return res.status(400).json({ error: '跟进类型和内容不能为空' });
+  }
+
+  const validTypes: FollowUpType[] = ['phone_call', 'time_change', 'worker_feedback', 'reassign', 'cancel', 'other'];
+  if (!validTypes.includes(type as FollowUpType)) {
+    return res.status(400).json({ error: '无效的跟进类型' });
+  }
+
+  const followUp = addFollowUp({
+    orderId: id,
+    type: type as FollowUpType,
+    content,
+    createdBy: createdBy || '管理员',
+  });
+
+  res.status(201).json(followUp);
 });
 
 export default router;
