@@ -5,6 +5,8 @@ import WorkersPage from "@/pages/WorkersPage";
 import WorkerFormPage from "@/pages/WorkerFormPage";
 import OrdersPage from "@/pages/OrdersPage";
 import OrderFormPage from "@/pages/OrderFormPage";
+import OrderDetailPage from "@/pages/OrderDetailPage";
+import ScheduleCalendarPage from "@/pages/ScheduleCalendarPage";
 import TimeTrackingPage from "@/pages/TimeTrackingPage";
 import PerformancePage from "@/pages/PerformancePage";
 import ReviewsPage from "@/pages/ReviewsPage";
@@ -21,6 +23,8 @@ export default function App() {
           <Route path="/workers/:id/edit" element={<WorkerFormPage />} />
           <Route path="/orders" element={<OrdersPage />} />
           <Route path="/orders/new" element={<OrderFormPage />} />
+          <Route path="/orders/:id" element={<OrderDetailPage />} />
+          <Route path="/schedule" element={<ScheduleCalendarPage />} />
           <Route path="/time-tracking" element={<TimeTrackingPage />} />
           <Route path="/performance" element={<PerformancePage />} />
           <Route path="/reviews" element={<ReviewsPage />} />

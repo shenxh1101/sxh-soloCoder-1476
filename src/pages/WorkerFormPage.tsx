@@ -208,7 +208,7 @@ export default function WorkerFormPage() {
               </label>
               <select
                 value={formData.status}
-                onChange={e => setFormData({ ...formData, status: e.target.value })}
+                onChange={e => setFormData({ ...formData, status: e.target.value as WorkerStatus })}
                 className="w-full px-4 py-2 border border-stone-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white"
               >
                 <option value="active">在职</option>

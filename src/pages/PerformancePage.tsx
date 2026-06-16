@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { BarChart3, TrendingUp, TrendingDown, Clock, Star, DollarSign, ChevronLeft, ChevronRight } from 'lucide-react';
+import { BarChart3, TrendingUp, TrendingDown, Clock, Star, DollarSign, ChevronLeft, ChevronRight, Download } from 'lucide-react';
 import { api } from '../lib/api';
 import type { MonthlyPerformance } from '../../shared/types';
 
@@ -41,9 +41,38 @@ export default function PerformancePage() {
   const totalHours = performances.reduce((sum, p) => sum + p.totalHours, 0);
   const totalOrders = performances.reduce((sum, p) => sum + p.totalOrders, 0);
   const totalSalary = performances.reduce((sum, p) => sum + p.totalSalary, 0);
-  const avgReviewRate = performances.length > 0
-    ? performances.reduce((sum, p) => sum + (p.positiveReviews - p.negativeReviews), 0) / performances.length
-    : 0;
+
+  function exportSalaryCSV() {
+    if (performances.length === 0) {
+      alert('本月暂无数据可导出');
+      return;
+    }
+    const headers = ['排名', '阿姨姓名', '订单数', '总工时(h)', '好评数', '差评数', '基本工资(¥)', '奖金/扣罚(¥)', '实发工资(¥)'];
+    const rows = performances.map((p, index) => [
+      index + 1,
+      p.workerName,
+      p.totalOrders,
+      p.totalHours,
+      p.positiveReviews,
+      p.negativeReviews,
+      p.baseSalary,
+      p.bonus >= 0 ? `+${p.bonus}` : `${p.bonus}`,
+      p.totalSalary,
+    ]);
+    const csvContent = [headers, ...rows]
+      .map(row => row.map(cell => `"${cell}"`).join(','))
+      .join('\n');
+    const BOM = '\uFEFF';
+    const blob = new Blob([BOM + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `${formatMonth(month)}工资表.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }
 
   if (loading) {
     return (
@@ -73,6 +102,13 @@ export default function PerformancePage() {
             <ChevronRight className="w-5 h-5 text-stone-600" />
           </button>
         </div>
+        <button
+          onClick={exportSalaryCSV}
+          className="flex items-center gap-2 px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors font-medium shadow-sm"
+        >
+          <Download className="w-4 h-4" />
+          导出工资表
+        </button>
       </div>
 
       <div className="grid grid-cols-4 gap-4">

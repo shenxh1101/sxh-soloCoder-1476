@@ -1,30 +1,50 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Sparkles, User, CheckCircle, Clock, MapPin, Phone } from 'lucide-react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import {
+  ArrowLeft,
+  Sparkles,
+  CheckCircle,
+  Clock,
+  MapPin,
+  Phone,
+  AlertCircle,
+} from 'lucide-react';
 import { api } from '../lib/api';
 import type { WorkerWithScore } from '../../shared/types';
 
 const SERVICE_TYPES = ['日常保洁', '深度保洁', '擦玻璃', '地板打蜡', '油烟机清洗'];
 
+interface FormErrors {
+  customerName?: string;
+  serviceAddress?: string;
+  serviceType?: string;
+  scheduledDate?: string;
+  time?: string;
+}
+
 export default function OrderFormPage() {
   const navigate = useNavigate();
-  
+  const [searchParams] = useSearchParams();
+
   const [formData, setFormData] = useState({
     customerName: '',
     customerPhone: '',
     serviceAddress: '',
     serviceType: '',
-    scheduledDate: '',
-    startTime: '09:00',
-    endTime: '12:00',
+    scheduledDate: searchParams.get('date') || '',
+    startTime: searchParams.get('startTime') || '09:00',
+    endTime: searchParams.get('endTime') || '12:00',
     notes: '',
   });
-  
+
   const [recommendedWorkers, setRecommendedWorkers] = useState<WorkerWithScore[]>([]);
-  const [selectedWorkerId, setSelectedWorkerId] = useState<number | null>(null);
+  const [selectedWorkerId, setSelectedWorkerId] = useState<number | null>(
+    searchParams.get('workerId') ? parseInt(searchParams.get('workerId')!) : null
+  );
   const [loading, setLoading] = useState(false);
   const [recommending, setRecommending] = useState(false);
   const [showRecommendation, setShowRecommendation] = useState(false);
+  const [errors, setErrors] = useState<FormErrors>({});
 
   useEffect(() => {
     const canRecommend = formData.serviceType && formData.scheduledDate && formData.startTime && formData.endTime;
@@ -41,17 +61,21 @@ export default function OrderFormPage() {
     try {
       const startTime = `${formData.scheduledDate}T${formData.startTime}:00`;
       const endTime = `${formData.scheduledDate}T${formData.endTime}:00`;
-      
+
       const workers = await api.workers.available({
         serviceType: formData.serviceType,
         startTime,
         endTime,
       });
-      
+
       setRecommendedWorkers(workers);
       setShowRecommendation(true);
-      if (workers.length > 0 && !selectedWorkerId) {
-        setSelectedWorkerId(workers[0].id);
+      if (workers.length > 0) {
+        if (selectedWorkerId && !workers.find(w => w.id === selectedWorkerId)) {
+          setSelectedWorkerId(workers[0].id);
+        } else if (!selectedWorkerId) {
+          setSelectedWorkerId(workers[0].id);
+        }
       }
     } catch (e) {
       console.error('获取推荐失败', e);
@@ -60,11 +84,41 @@ export default function OrderFormPage() {
     }
   }
 
+  function validateForm(): boolean {
+    const newErrors: FormErrors = {};
+
+    if (!formData.customerName.trim()) {
+      newErrors.customerName = '请填写客户姓名';
+    }
+
+    if (!formData.serviceAddress.trim()) {
+      newErrors.serviceAddress = '请填写服务地址';
+    }
+
+    if (!formData.serviceType) {
+      newErrors.serviceType = '请选择服务类型';
+    }
+
+    if (!formData.scheduledDate) {
+      newErrors.scheduledDate = '请选择服务日期';
+    }
+
+    if (formData.scheduledDate && formData.startTime && formData.endTime) {
+      const startMinutes = parseInt(formData.startTime.split(':')[0]) * 60 + parseInt(formData.startTime.split(':')[1]);
+      const endMinutes = parseInt(formData.endTime.split(':')[0]) * 60 + parseInt(formData.endTime.split(':')[1]);
+      if (endMinutes <= startMinutes) {
+        newErrors.time = '结束时间必须晚于开始时间';
+      }
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    
-    if (!formData.customerName || !formData.serviceType || !formData.scheduledDate) {
-      alert('请填写必要信息');
+
+    if (!validateForm()) {
       return;
     }
 
@@ -74,14 +128,14 @@ export default function OrderFormPage() {
       const endTime = `${formData.scheduledDate}T${formData.endTime}:00`;
 
       await api.orders.create({
-        customerName: formData.customerName,
-        customerPhone: formData.customerPhone,
-        serviceAddress: formData.serviceAddress,
+        customerName: formData.customerName.trim(),
+        customerPhone: formData.customerPhone.trim(),
+        serviceAddress: formData.serviceAddress.trim(),
         serviceType: formData.serviceType,
         scheduledStartTime: startTime,
         scheduledEndTime: endTime,
         workerId: selectedWorkerId || undefined,
-        notes: formData.notes,
+        notes: formData.notes.trim() || undefined,
       });
 
       navigate('/orders');
@@ -91,6 +145,11 @@ export default function OrderFormPage() {
       setLoading(false);
     }
   }
+
+  const inputClass = (hasError?: boolean) =>
+    `w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-colors ${
+      hasError ? 'border-red-400 bg-red-50' : 'border-stone-200'
+    }`;
 
   return (
     <div className="max-w-4xl mx-auto">
@@ -107,9 +166,10 @@ export default function OrderFormPage() {
           <div className="bg-white rounded-xl border border-stone-200 shadow-sm">
             <div className="p-6 border-b border-stone-100">
               <h2 className="text-lg font-semibold text-stone-800">新建预约订单</h2>
+              <p className="text-sm text-stone-500 mt-1">带 <span className="text-red-500">*</span> 的为必填项</p>
             </div>
 
-            <form onSubmit={handleSubmit} className="p-6 space-y-5">
+            <form onSubmit={handleSubmit} className="p-6 space-y-5" noValidate>
               <div>
                 <label className="block text-sm font-medium text-stone-700 mb-2">
                   客户姓名 <span className="text-red-500">*</span>
@@ -117,10 +177,19 @@ export default function OrderFormPage() {
                 <input
                   type="text"
                   value={formData.customerName}
-                  onChange={e => setFormData({ ...formData, customerName: e.target.value })}
-                  className="w-full px-4 py-2 border border-stone-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  onChange={e => {
+                    setFormData({ ...formData, customerName: e.target.value });
+                    if (errors.customerName) setErrors({ ...errors, customerName: undefined });
+                  }}
+                  className={inputClass(!!errors.customerName)}
                   placeholder="请输入客户姓名"
                 />
+                {errors.customerName && (
+                  <p className="mt-1.5 text-sm text-red-600 flex items-center gap-1">
+                    <AlertCircle className="w-4 h-4" />
+                    {errors.customerName}
+                  </p>
+                )}
               </div>
 
               <div>
@@ -133,7 +202,7 @@ export default function OrderFormPage() {
                     type="tel"
                     value={formData.customerPhone}
                     onChange={e => setFormData({ ...formData, customerPhone: e.target.value })}
-                    className="w-full pl-10 pr-4 py-2 border border-stone-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                    className={`${inputClass(false)} pl-10`}
                     placeholder="请输入联系电话"
                   />
                 </div>
@@ -141,18 +210,27 @@ export default function OrderFormPage() {
 
               <div>
                 <label className="block text-sm font-medium text-stone-700 mb-2">
-                  服务地址
+                  服务地址 <span className="text-red-500">*</span>
                 </label>
                 <div className="relative">
                   <MapPin className="absolute left-3 top-3 w-5 h-5 text-stone-400" />
                   <input
                     type="text"
                     value={formData.serviceAddress}
-                    onChange={e => setFormData({ ...formData, serviceAddress: e.target.value })}
-                    className="w-full pl-10 pr-4 py-2 border border-stone-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                    onChange={e => {
+                      setFormData({ ...formData, serviceAddress: e.target.value });
+                      if (errors.serviceAddress) setErrors({ ...errors, serviceAddress: undefined });
+                    }}
+                    className={`${inputClass(!!errors.serviceAddress)} pl-10`}
                     placeholder="请输入详细地址"
                   />
                 </div>
+                {errors.serviceAddress && (
+                  <p className="mt-1.5 text-sm text-red-600 flex items-center gap-1">
+                    <AlertCircle className="w-4 h-4" />
+                    {errors.serviceAddress}
+                  </p>
+                )}
               </div>
 
               <div>
@@ -164,10 +242,13 @@ export default function OrderFormPage() {
                     <button
                       key={type}
                       type="button"
-                      onClick={() => setFormData({ ...formData, serviceType: type })}
+                      onClick={() => {
+                        setFormData({ ...formData, serviceType: type });
+                        if (errors.serviceType) setErrors({ ...errors, serviceType: undefined });
+                      }}
                       className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                         formData.serviceType === type
-                          ? 'bg-primary-500 text-white'
+                          ? 'bg-primary-500 text-white shadow-sm'
                           : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
                       }`}
                     >
@@ -175,6 +256,12 @@ export default function OrderFormPage() {
                     </button>
                   ))}
                 </div>
+                {errors.serviceType && (
+                  <p className="mt-1.5 text-sm text-red-600 flex items-center gap-1">
+                    <AlertCircle className="w-4 h-4" />
+                    {errors.serviceType}
+                  </p>
+                )}
               </div>
 
               <div>
@@ -184,9 +271,18 @@ export default function OrderFormPage() {
                 <input
                   type="date"
                   value={formData.scheduledDate}
-                  onChange={e => setFormData({ ...formData, scheduledDate: e.target.value })}
-                  className="w-full px-4 py-2 border border-stone-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  onChange={e => {
+                    setFormData({ ...formData, scheduledDate: e.target.value });
+                    if (errors.scheduledDate) setErrors({ ...errors, scheduledDate: undefined });
+                  }}
+                  className={inputClass(!!errors.scheduledDate)}
                 />
+                {errors.scheduledDate && (
+                  <p className="mt-1.5 text-sm text-red-600 flex items-center gap-1">
+                    <AlertCircle className="w-4 h-4" />
+                    {errors.scheduledDate}
+                  </p>
+                )}
               </div>
 
               <div className="grid grid-cols-2 gap-4">
@@ -199,8 +295,11 @@ export default function OrderFormPage() {
                     <input
                       type="time"
                       value={formData.startTime}
-                      onChange={e => setFormData({ ...formData, startTime: e.target.value })}
-                      className="w-full pl-10 pr-4 py-2 border border-stone-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                      onChange={e => {
+                        setFormData({ ...formData, startTime: e.target.value });
+                        if (errors.time) setErrors({ ...errors, time: undefined });
+                      }}
+                      className={`${inputClass(!!errors.time)} pl-10`}
                     />
                   </div>
                 </div>
@@ -213,12 +312,21 @@ export default function OrderFormPage() {
                     <input
                       type="time"
                       value={formData.endTime}
-                      onChange={e => setFormData({ ...formData, endTime: e.target.value })}
-                      className="w-full pl-10 pr-4 py-2 border border-stone-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                      onChange={e => {
+                        setFormData({ ...formData, endTime: e.target.value });
+                        if (errors.time) setErrors({ ...errors, time: undefined });
+                      }}
+                      className={`${inputClass(!!errors.time)} pl-10`}
                     />
                   </div>
                 </div>
               </div>
+              {errors.time && (
+                <p className="-mt-2 text-sm text-red-600 flex items-center gap-1">
+                  <AlertCircle className="w-4 h-4" />
+                  {errors.time}
+                </p>
+              )}
 
               <div>
                 <label className="block text-sm font-medium text-stone-700 mb-2">
@@ -228,23 +336,23 @@ export default function OrderFormPage() {
                   value={formData.notes}
                   onChange={e => setFormData({ ...formData, notes: e.target.value })}
                   rows={3}
-                  className="w-full px-4 py-2 border border-stone-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none"
+                  className={`${inputClass(false)} resize-none`}
                   placeholder="特殊要求、注意事项等"
                 />
               </div>
 
-              <div className="flex justify-end gap-3 pt-4">
+              <div className="flex justify-end gap-3 pt-4 border-t border-stone-100">
                 <button
                   type="button"
                   onClick={() => navigate('/orders')}
-                  className="px-6 py-2 border border-stone-200 text-stone-600 rounded-lg hover:bg-stone-50 transition-colors font-medium"
+                  className="px-6 py-2.5 border border-stone-200 text-stone-600 rounded-lg hover:bg-stone-50 transition-colors font-medium"
                 >
                   取消
                 </button>
                 <button
                   type="submit"
                   disabled={loading}
-                  className="px-6 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors font-medium disabled:opacity-50"
+                  className="px-6 py-2.5 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
                 >
                   {loading ? '创建中...' : '创建订单'}
                 </button>
@@ -280,7 +388,7 @@ export default function OrderFormPage() {
                       onClick={() => setSelectedWorkerId(worker.id)}
                       className={`p-4 rounded-lg border-2 cursor-pointer transition-all ${
                         selectedWorkerId === worker.id
-                          ? 'border-primary-500 bg-primary-50'
+                          ? 'border-primary-500 bg-primary-50 shadow-sm'
                           : 'border-stone-200 hover:border-stone-300'
                       }`}
                     >
